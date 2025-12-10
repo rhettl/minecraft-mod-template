@@ -1,0 +1,55 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# Local gradle properties override (not in git)
+# User-specific settings like development=true
+gradle.properties.local
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# VSCode
+.vscode/
+
+# macOS
+.DS_Store
+
+# Minecraft run directories (if you test locally)
+run/
+logs/
+minecraft/
+
+# Deployment symlinks (local minecraft instances)
+minecraft-fabric/
+minecraft-neoforge/
+
+# Temporary files
+*.log
+*.tmp
+
+# Build artifacts not needed in source control
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Development documentation (personal/AI notes, investigations, screenshots)
+dev-docs/
+
+# Claude Code local settings (personal, not committed)
+.claude/settings.local.json
+
+# Test scripts (for local testing only)
+build-test*.sh

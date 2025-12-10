@@ -1,0 +1,104 @@
+name: Publish to Modrinth
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v0.3.2)'
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Skip auto-publish for RC/dev versions (v0.4.0-RC1, v0.4.0-dev, etc.)
+    # Use workflow_dispatch to manually publish these if needed
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.release.tag_name, '-') }}
+
+    steps:
+      - name: Checkout (for gh CLI)
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: |
+          # Use input tag for manual dispatch, otherwise use release tag
+          TAG="${{ inputs.tag || github.event.release.tag_name }}"
+          VERSION=${TAG#v}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION (tag: $TAG)"
+
+      - name: Download release assets
+        uses: robinraju/release-downloader@v1
+        with:
+          tag: ${{ steps.version.outputs.tag }}
+          fileName: "*.jar"
+          out-file-path: artifacts
+
+      - name: List downloaded files
+        run: ls -la artifacts/
+
+      - name: Get release notes
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Fetch release body from API
+          BODY=$(gh release view "${{ steps.version.outputs.tag }}" --json body -q '.body' || echo "")
+          # Escape for GitHub Actions
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Publish NeoForge version
+      - name: Publish NeoForge to Modrinth
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          # TODO: Update modrinth-id after creating project on Modrinth
+          modrinth-id: cobbledollars-market
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+
+          files: artifacts/*-neoforge.jar
+
+          name: CobbleDollars Market ${{ steps.version.outputs.version }}
+          version: ${{ steps.version.outputs.version }}-neoforge
+          version-type: beta
+          changelog: ${{ steps.release.outputs.body }}
+
+          loaders: neoforge
+          game-versions: 1.21.1
+
+          # No architectury-api dependency (using plugin only)
+          dependencies: |
+            cobblemon(required)
+
+          fail-mode: warn
+
+      # Publish Fabric version
+      - name: Publish Fabric to Modrinth
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          # TODO: Update modrinth-id after creating project on Modrinth
+          modrinth-id: cobbledollars-market
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+
+          files: artifacts/*-fabric.jar
+
+          name: CobbleDollars Market ${{ steps.version.outputs.version }}
+          version: ${{ steps.version.outputs.version }}-fabric
+          version-type: beta
+          changelog: ${{ steps.release.outputs.body }}
+
+          loaders: fabric
+          game-versions: 1.21.1
+
+          # fabric-language-kotlin required for Kotlin mods
+          dependencies: |
+            cobblemon(required)
+            fabric-api(required)
+            fabric-language-kotlin(required)
+
+          fail-mode: warn
