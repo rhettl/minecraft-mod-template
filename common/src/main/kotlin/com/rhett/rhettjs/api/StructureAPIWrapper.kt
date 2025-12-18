@@ -27,19 +27,26 @@ class StructureAPIWrapper(
         val readFn = ReadFunction(structureApi)
         val writeFn = WriteFunction(structureApi)
 
-        // Set parent scope so functions have access to the proper scope
-        listFn.setParentScope(this)
-        readFn.setParentScope(this)
-        writeFn.setParentScope(this)
-
+        // Don't set parent scope here - it will be set when the wrapper is injected into the script engine
+        // This allows the functions to get the correct global scope
         put("list", this, listFn)
         put("read", this, readFn)
         put("write", this, writeFn)
 
         // Add nbt property for advanced operations
         val nbtWrapper = NBTUtilityWrapper(structureApi.getNbtApi())
-        nbtWrapper.setParentScope(this)
         put("nbt", this, nbtWrapper)
+    }
+
+    override fun setParentScope(scope: Scriptable?) {
+        super.setParentScope(scope)
+
+        // When parent scope is set on the wrapper, propagate it to all child functions
+        // This ensures they can create JavaScript objects/arrays correctly
+        (get("list", this) as? BaseFunction)?.setParentScope(scope)
+        (get("read", this) as? BaseFunction)?.setParentScope(scope)
+        (get("write", this) as? BaseFunction)?.setParentScope(scope)
+        (get("nbt", this) as? ScriptableObject)?.setParentScope(scope)
     }
 
     /**
@@ -54,14 +61,16 @@ class StructureAPIWrapper(
             }
 
             val structures = structureApi.list(pool)
-            // Get the top-level scope - use thisObj (Structure object) to traverse the parent chain
-            // thisObj is the JavaScript object this function is attached to (the Structure wrapper)
-            val actualScope = if (thisObj != null) {
-                getTopLevelScope(thisObj)
-            } else {
-                getTopLevelScope(this)
+
+            // Get the global scope from thisObj's parent
+            val topScope = thisObj?.parentScope ?: ScriptableObject.getTopLevelScope(scope)
+
+            // Create JavaScript array manually
+            val jsArray = cx.newObject(topScope, "Array") as org.mozilla.javascript.NativeArray
+            structures.forEachIndexed { index, structure ->
+                jsArray.put(index, jsArray, structure)
             }
-            return cx.newArray(actualScope, structures.toTypedArray())
+            return jsArray
         }
     }
 
@@ -77,14 +86,10 @@ class StructureAPIWrapper(
             val name = args[0] as String
             val data = structureApi.read(name)
 
-            // Get the top-level scope - use thisObj if available
-            val actualScope = if (thisObj != null) {
-                getTopLevelScope(thisObj)
-            } else {
-                getTopLevelScope(this)
-            }
+            // Use ScriptableObject.getTopLevelScope() to get the global scope
+            val topScope = ScriptableObject.getTopLevelScope(scope)
             return if (data != null) {
-                Context.javaToJS(data, actualScope)
+                Context.javaToJS(data, topScope)
             } else {
                 null
             }
@@ -127,26 +132,27 @@ class NBTUtilityWrapper(private val nbtApi: NBTAPI) : ScriptableObject() {
         val findFn = FindFunction(nbtApi)
         val someFn = SomeFunction(nbtApi)
 
-        // Set parent scope so functions have access to the proper scope
-        forEachFn.setParentScope(this)
-        filterFn.setParentScope(this)
-        findFn.setParentScope(this)
-        someFn.setParentScope(this)
-
+        // Don't set parent scope here - it will be set when the wrapper is injected
         put("forEach", this, forEachFn)
         put("filter", this, filterFn)
         put("find", this, findFn)
         put("some", this, someFn)
     }
 
+    override fun setParentScope(scope: Scriptable?) {
+        super.setParentScope(scope)
+
+        // Propagate parent scope to all child functions
+        (get("forEach", this) as? BaseFunction)?.setParentScope(scope)
+        (get("filter", this) as? BaseFunction)?.setParentScope(scope)
+        (get("find", this) as? BaseFunction)?.setParentScope(scope)
+        (get("some", this) as? BaseFunction)?.setParentScope(scope)
+    }
+
     private class ForEachFunction(private val nbtApi: NBTAPI) : BaseFunction() {
         override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<Any?>): Any? {
-            // Get the top-level scope - use thisObj if available
-            val actualScope = if (thisObj != null) {
-                getTopLevelScope(thisObj)
-            } else {
-                getTopLevelScope(this)
-            }
+            // Get the global scope from thisObj's parent
+            val topScope = thisObj?.parentScope ?: ScriptableObject.getTopLevelScope(scope)
 
             if (args.size < 2) {
                 throw IllegalArgumentException("nbt.forEach() requires data and callback")
@@ -157,11 +163,14 @@ class NBTUtilityWrapper(private val nbtApi: NBTAPI) : ScriptableObject() {
                 ?: throw IllegalArgumentException("Second argument must be a function")
 
             nbtApi.forEach(data) { value, path, parent ->
-                val jsPath = cx.newArray(actualScope, path.toTypedArray())
-                callback.call(cx, actualScope, actualScope, arrayOf(
-                    Context.javaToJS(value, actualScope),
+                val jsPath = cx.newObject(topScope, "Array") as org.mozilla.javascript.NativeArray
+                path.forEachIndexed { index, item ->
+                    jsPath.put(index, jsPath, item)
+                }
+                callback.call(cx, topScope, topScope, arrayOf(
+                    Context.javaToJS(value, topScope),
                     jsPath,
-                    Context.javaToJS(parent, actualScope)
+                    Context.javaToJS(parent, topScope)
                 ))
             }
 
@@ -171,12 +180,8 @@ class NBTUtilityWrapper(private val nbtApi: NBTAPI) : ScriptableObject() {
 
     private class FilterFunction(private val nbtApi: NBTAPI) : BaseFunction() {
         override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<Any?>): Any {
-            // Get the top-level scope - use thisObj if available
-            val actualScope = if (thisObj != null) {
-                getTopLevelScope(thisObj)
-            } else {
-                getTopLevelScope(this)
-            }
+            // Get the global scope from thisObj's parent
+            val topScope = thisObj?.parentScope ?: ScriptableObject.getTopLevelScope(scope)
 
             if (args.size < 2) {
                 throw IllegalArgumentException("nbt.filter() requires data and predicate")
@@ -187,36 +192,43 @@ class NBTUtilityWrapper(private val nbtApi: NBTAPI) : ScriptableObject() {
                 ?: throw IllegalArgumentException("Second argument must be a function")
 
             val results = nbtApi.filter(data) { value, path, parent ->
-                val jsPath = cx.newArray(actualScope, path.toTypedArray())
-                val result = predicate.call(cx, actualScope, actualScope, arrayOf(
-                    Context.javaToJS(value, actualScope),
+                val jsPath = cx.newObject(topScope, "Array") as org.mozilla.javascript.NativeArray
+                path.forEachIndexed { index, item ->
+                    jsPath.put(index, jsPath, item)
+                }
+                val result = predicate.call(cx, topScope, topScope, arrayOf(
+                    Context.javaToJS(value, topScope),
                     jsPath,
-                    Context.javaToJS(parent, actualScope)
+                    Context.javaToJS(parent, topScope)
                 ))
                 Context.toBoolean(result)
             }
 
             // Convert results to JavaScript array
             val jsResults = results.map { result ->
-                val obj = cx.newObject(actualScope)
-                obj.put("value", obj, Context.javaToJS(result.value, actualScope))
-                obj.put("path", obj, cx.newArray(actualScope, result.path.toTypedArray()))
-                obj.put("parent", obj, Context.javaToJS(result.parent, actualScope))
+                val obj = cx.newObject(topScope)
+                val jsPath = cx.newObject(topScope, "Array") as org.mozilla.javascript.NativeArray
+                result.path.forEachIndexed { index, item ->
+                    jsPath.put(index, jsPath, item)
+                }
+                obj.put("value", obj, Context.javaToJS(result.value, topScope))
+                obj.put("path", obj, jsPath)
+                obj.put("parent", obj, Context.javaToJS(result.parent, topScope))
                 obj
             }
 
-            return cx.newArray(actualScope, jsResults.toTypedArray())
+            val jsResultsArray = cx.newObject(topScope, "Array") as org.mozilla.javascript.NativeArray
+            jsResults.forEachIndexed { index, item ->
+                jsResultsArray.put(index, jsResultsArray, item)
+            }
+            return jsResultsArray
         }
     }
 
     private class FindFunction(private val nbtApi: NBTAPI) : BaseFunction() {
         override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<Any?>): Any? {
-            // Get the top-level scope - use thisObj if available
-            val actualScope = if (thisObj != null) {
-                getTopLevelScope(thisObj)
-            } else {
-                getTopLevelScope(this)
-            }
+            // Get the global scope from thisObj's parent
+            val topScope = thisObj?.parentScope ?: ScriptableObject.getTopLevelScope(scope)
 
             if (args.size < 2) {
                 throw IllegalArgumentException("nbt.find() requires data and predicate")
@@ -227,20 +239,27 @@ class NBTUtilityWrapper(private val nbtApi: NBTAPI) : ScriptableObject() {
                 ?: throw IllegalArgumentException("Second argument must be a function")
 
             val result = nbtApi.find(data) { value, path, parent ->
-                val jsPath = cx.newArray(actualScope, path.toTypedArray())
-                val predicateResult = predicate.call(cx, actualScope, actualScope, arrayOf(
-                    Context.javaToJS(value, actualScope),
+                val jsPath = cx.newObject(topScope, "Array") as org.mozilla.javascript.NativeArray
+                path.forEachIndexed { index, item ->
+                    jsPath.put(index, jsPath, item)
+                }
+                val predicateResult = predicate.call(cx, topScope, topScope, arrayOf(
+                    Context.javaToJS(value, topScope),
                     jsPath,
-                    Context.javaToJS(parent, actualScope)
+                    Context.javaToJS(parent, topScope)
                 ))
                 Context.toBoolean(predicateResult)
             }
 
             return if (result != null) {
-                val obj = cx.newObject(actualScope)
-                obj.put("value", obj, Context.javaToJS(result.value, actualScope))
-                obj.put("path", obj, cx.newArray(actualScope, result.path.toTypedArray()))
-                obj.put("parent", obj, Context.javaToJS(result.parent, actualScope))
+                val obj = cx.newObject(topScope)
+                val jsPath = cx.newObject(topScope, "Array") as org.mozilla.javascript.NativeArray
+                result.path.forEachIndexed { index, item ->
+                    jsPath.put(index, jsPath, item)
+                }
+                obj.put("value", obj, Context.javaToJS(result.value, topScope))
+                obj.put("path", obj, jsPath)
+                obj.put("parent", obj, Context.javaToJS(result.parent, topScope))
                 obj
             } else {
                 null
@@ -250,12 +269,8 @@ class NBTUtilityWrapper(private val nbtApi: NBTAPI) : ScriptableObject() {
 
     private class SomeFunction(private val nbtApi: NBTAPI) : BaseFunction() {
         override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<Any?>): Boolean {
-            // Get the top-level scope - use thisObj if available
-            val actualScope = if (thisObj != null) {
-                getTopLevelScope(thisObj)
-            } else {
-                getTopLevelScope(this)
-            }
+            // Get the global scope from thisObj's parent
+            val topScope = thisObj?.parentScope ?: ScriptableObject.getTopLevelScope(scope)
 
             if (args.size < 2) {
                 throw IllegalArgumentException("nbt.some() requires data and predicate")
@@ -266,11 +281,14 @@ class NBTUtilityWrapper(private val nbtApi: NBTAPI) : ScriptableObject() {
                 ?: throw IllegalArgumentException("Second argument must be a function")
 
             return nbtApi.some(data) { value, path, parent ->
-                val jsPath = cx.newArray(actualScope, path.toTypedArray())
-                val result = predicate.call(cx, actualScope, actualScope, arrayOf(
-                    Context.javaToJS(value, actualScope),
+                val jsPath = cx.newObject(topScope, "Array") as org.mozilla.javascript.NativeArray
+                path.forEachIndexed { index, item ->
+                    jsPath.put(index, jsPath, item)
+                }
+                val result = predicate.call(cx, topScope, topScope, arrayOf(
+                    Context.javaToJS(value, topScope),
                     jsPath,
-                    Context.javaToJS(parent, actualScope)
+                    Context.javaToJS(parent, topScope)
                 ))
                 Context.toBoolean(result)
             }

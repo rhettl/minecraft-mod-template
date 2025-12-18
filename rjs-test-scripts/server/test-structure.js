@@ -9,10 +9,10 @@ console.log('[Structure Test] Starting structure API tests...');
 // Test 1: List all structures
 console.log('[Structure Test] Test 1: List all structures');
 try {
-    let allStructures1 = Structure.list();
-    console.log('[Structure Test] ✓ Found', allStructures1.length, 'structures');
+    let allStructures = Structure.list();
+    console.log('[Structure Test] ✓ Found', allStructures.length, 'structures');
     if (allStructures.length > 0) {
-        console.log('[Structure Test] Sample:', allStructures1.slice(0, 3).join(', '));
+        console.log('[Structure Test] Sample:', allStructures.slice(0, 3).join(', '));
     }
 } catch (e) {
     console.error('[Structure Test] ✗ Test 1 failed:', e.message);
@@ -55,7 +55,7 @@ try {
 // Test 4: Read with .nbt extension
 console.log('[Structure Test] Test 4: Read with .nbt extension');
 try {
-    let allStructures4 = Structure.list();
+    let allStructures = Structure.list();
     if (allStructures.length > 0) {
         let testStructure = allStructures[0];
 
@@ -76,7 +76,7 @@ try {
 // Test 5: NBT utility - forEach
 console.log('[Structure Test] Test 5: Structure.nbt.forEach()');
 try {
-    let allStructures6 = Structure.list();
+    let allStructures = Structure.list();
     if (allStructures.length > 0) {
         let data = Structure.read(allStructures[0]);
 
@@ -96,7 +96,7 @@ try {
 // Test 6: NBT utility - filter for paintings
 console.log('[Structure Test] Test 6: Structure.nbt.filter() for paintings');
 try {
-    let allStructures8 = Structure.list();
+    let allStructures = Structure.list();
     if (allStructures.length > 0) {
         let data = Structure.read(allStructures[0]);
 
@@ -123,7 +123,7 @@ try {
 // Test 7: NBT utility - find first entity
 console.log('[Structure Test] Test 7: Structure.nbt.find() first entity');
 try {
-    let allStructures9 = Structure.list();
+    let allStructures = Structure.list();
     if (allStructures.length > 0) {
         let data = Structure.read(allStructures[0]);
 
@@ -146,7 +146,7 @@ try {
 // Test 8: NBT utility - some (check for entities)
 console.log('[Structure Test] Test 8: Structure.nbt.some() check for entities');
 try {
-    let allStructures10 = Structure.list();
+    let allStructures = Structure.list();
     if (allStructures.length > 0) {
         let data = Structure.read(allStructures[0]);
 
@@ -165,7 +165,7 @@ try {
 // Test 9: Write structure (creates backup)
 console.log('[Structure Test] Test 9: Write structure (backup test)');
 try {
-    let allStructures11 = Structure.list();
+    let allStructures = Structure.list();
     if (allStructures.length > 0) {
         let testStructure = allStructures[0];
         let data = Structure.read(testStructure);
