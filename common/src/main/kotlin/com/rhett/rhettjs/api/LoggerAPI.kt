@@ -1,12 +1,15 @@
 package com.rhett.rhettjs.api
 
 import com.rhett.rhettjs.RhettJSCommon
+import com.rhett.rhettjs.threading.ThreadSafeAPI
 
 /**
  * Logger API for JavaScript scripts.
  * Available in all contexts (main thread, workers).
+ *
+ * Thread-safe: Only performs logging operations.
  */
-class LoggerAPI {
+class LoggerAPI : ThreadSafeAPI {
     fun info(message: String) {
         RhettJSCommon.LOGGER.info("[RhettJS] $message")
     }

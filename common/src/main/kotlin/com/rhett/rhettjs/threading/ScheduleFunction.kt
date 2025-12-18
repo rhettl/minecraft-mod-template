@@ -1,6 +1,7 @@
 package com.rhett.rhettjs.threading
 
 import com.rhett.rhettjs.RhettJSCommon
+import com.rhett.rhettjs.util.ErrorHandler
 import org.mozilla.javascript.Context
 import org.mozilla.javascript.Function
 import org.mozilla.javascript.Scriptable
@@ -106,7 +107,7 @@ class ScheduleFunction {
                 task.onComplete(task.args)
 
             } catch (e: Exception) {
-                RhettJSCommon.LOGGER.error("[RhettJS] Error in schedule() callback", e)
+                ErrorHandler.logScriptError("schedule() callback", e)
                 // Still call onComplete even on error (for testing)
                 task.onComplete(task.args)
             } finally {

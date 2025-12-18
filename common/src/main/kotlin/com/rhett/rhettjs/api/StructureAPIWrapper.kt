@@ -1,5 +1,6 @@
 package com.rhett.rhettjs.api
 
+import com.rhett.rhettjs.threading.ThreadSafeAPI
 import org.mozilla.javascript.BaseFunction
 import org.mozilla.javascript.Context
 import org.mozilla.javascript.Function
@@ -14,10 +15,12 @@ import org.mozilla.javascript.ScriptableObject
  *   Structure.read(name)
  *   Structure.write(name, data)
  *   Structure.nbt.*  (access to NBT utility methods)
+ *
+ * Thread-safe: Only performs file I/O operations, no Minecraft object access.
  */
 class StructureAPIWrapper(
     private val structureApi: StructureAPI
-) : ScriptableObject() {
+) : ScriptableObject(), ThreadSafeAPI {
 
     override fun getClassName(): String = "Structure"
 
