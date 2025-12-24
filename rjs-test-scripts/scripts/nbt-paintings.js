@@ -146,6 +146,15 @@ function listAllStructures () {
 
         buffer.log('');
         buffer.log('Click [scan] to see details, [fix] to auto-fix');
+        buffer.raw(
+          ChatHelper.replace('Or use the --fix-all flag to run for all structures with issue', [
+            ChatHelper.button('--fix-all', '/rjs run nbt-paintings --fix-all', {
+              color: 'green',
+              clickAction: 'suggest_command',
+              hoverText: "Click here to fix all!"
+            })
+          ])
+        );
       }
 
       buffer.send();

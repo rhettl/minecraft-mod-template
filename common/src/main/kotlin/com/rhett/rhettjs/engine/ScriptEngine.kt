@@ -8,6 +8,7 @@ import com.rhett.rhettjs.api.RuntimeAPI
 import com.rhett.rhettjs.api.TaskAPI
 import com.rhett.rhettjs.api.WaitAPI
 import com.rhett.rhettjs.api.StructureAPIWrapper
+import com.rhett.rhettjs.api.WorldAPIWrapper
 import com.rhett.rhettjs.config.ConfigManager
 import com.rhett.rhettjs.events.StartupEventsAPI
 import com.rhett.rhettjs.events.ServerEventsAPI
@@ -28,12 +29,28 @@ object ScriptEngine {
         private set
 
     /**
+     * World API instance - initialized during server startup.
+     * Available in all script contexts. World access is synchronized to main thread.
+     */
+    var worldAPI: WorldAPIWrapper? = null
+        private set
+
+    /**
      * Initialize the Structure API with server paths.
      * Called once during server startup.
      */
     fun initializeStructureAPI(structureApiWrapper: StructureAPIWrapper) {
         structureAPI = structureApiWrapper
         ConfigManager.debug("Structure API initialized and registered globally")
+    }
+
+    /**
+     * Initialize the World API with server instance.
+     * Called once during server startup.
+     */
+    fun initializeWorldAPI(worldApiWrapper: WorldAPIWrapper) {
+        worldAPI = worldApiWrapper
+        ConfigManager.debug("World API initialized and registered globally")
     }
 
     /**
@@ -182,11 +199,18 @@ object ScriptEngine {
         PromiseExtensions.inject(scope)
         ConfigManager.debug("Injected Promise extensions: thenTask, thenWait")
 
-        // Phase 3: Structure API - available in all contexts (thread-safe file I/O)
+        // Structure API - available in all contexts (thread-safe file I/O)
         structureAPI?.let { api ->
             api.setParentScope(scope)
             scope.put("Structure", scope, api)
             ConfigManager.debug("Injected Structure API")
+        }
+
+        // World API - available in all contexts (synchronized to main thread)
+        worldAPI?.let { api ->
+            api.setParentScope(scope)
+            scope.put("World", scope, api)
+            ConfigManager.debug("Injected World API")
         }
 
         // Add platform-specific APIs

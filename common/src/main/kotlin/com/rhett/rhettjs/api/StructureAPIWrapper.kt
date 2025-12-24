@@ -33,6 +33,11 @@ class StructureAPIWrapper(
         val backupFn = BackupFunction(structureApi)
         val listBackupsFn = ListBackupsFunction(structureApi)
         val restoreFn = RestoreFunction(structureApi)
+        val listBlocksFn = ListBlocksFunction(structureApi)
+        val replaceBlocksFn = ReplaceBlocksFunction(structureApi)
+        val blocksListFn = BlocksListFunction(structureApi)
+        val blocksReplaceFn = BlocksReplaceFunction(structureApi)
+        val blocksReplaceVanillaFn = BlocksReplaceVanillaFunction(structureApi)
 
         // Don't set parent scope here - it will be set when the wrapper is injected into the script engine
         // This allows the functions to get the correct global scope
@@ -42,6 +47,11 @@ class StructureAPIWrapper(
         put("backup", this, backupFn)
         put("listBackups", this, listBackupsFn)
         put("restore", this, restoreFn)
+        put("listBlocks", this, listBlocksFn)
+        put("replaceBlocks", this, replaceBlocksFn)
+        put("blocksList", this, blocksListFn)
+        put("blocksReplace", this, blocksReplaceFn)
+        put("blocksReplaceVanilla", this, blocksReplaceVanillaFn)
 
         // Add nbt property for advanced operations
         val nbtWrapper = NBTUtilityWrapper(structureApi.getNbtApi())
@@ -59,6 +69,11 @@ class StructureAPIWrapper(
         (get("backup", this) as? BaseFunction)?.setParentScope(scope)
         (get("listBackups", this) as? BaseFunction)?.setParentScope(scope)
         (get("restore", this) as? BaseFunction)?.setParentScope(scope)
+        (get("listBlocks", this) as? BaseFunction)?.setParentScope(scope)
+        (get("replaceBlocks", this) as? BaseFunction)?.setParentScope(scope)
+        (get("blocksList", this) as? BaseFunction)?.setParentScope(scope)
+        (get("blocksReplace", this) as? BaseFunction)?.setParentScope(scope)
+        (get("blocksReplaceVanilla", this) as? BaseFunction)?.setParentScope(scope)
         (get("nbt", this) as? ScriptableObject)?.setParentScope(scope)
     }
 
@@ -225,6 +240,171 @@ class StructureAPIWrapper(
             val success = structureApi.restore(name, targetName, backupTimestamp)
 
             return success
+        }
+    }
+
+    /**
+     * ListBlocks function implementation.
+     */
+    private class ListBlocksFunction(private val structureApi: StructureAPI) : BaseFunction() {
+        override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<Any?>): Any {
+            if (args.isEmpty()) {
+                throw ScriptRuntime.typeError("Structure.listBlocks() requires structure data")
+            }
+
+            val structureData = Context.jsToJava(args[0], Any::class.java)
+            val blockCounts = structureApi.listBlocks(structureData)
+
+            // Convert to JavaScript object
+            val jsObject = cx.newObject(scope)
+            blockCounts.forEach { (blockName, count) ->
+                jsObject.put(blockName, jsObject, count)
+            }
+            return jsObject
+        }
+    }
+
+    /**
+     * ReplaceBlocks function implementation.
+     */
+    private class ReplaceBlocksFunction(private val structureApi: StructureAPI) : BaseFunction() {
+        override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<Any?>): Any? {
+            if (args.size < 2) {
+                throw ScriptRuntime.typeError("Structure.replaceBlocks() requires structure data and replacements map")
+            }
+
+            val structureData = Context.jsToJava(args[0], Any::class.java)
+            val replacementsJs = args[1]
+
+            // Convert JS object to Map<String, String>
+            val replacements = mutableMapOf<String, String>()
+            if (replacementsJs is Scriptable) {
+                val ids = replacementsJs.ids
+                for (id in ids) {
+                    val key = id.toString()
+                    val value = replacementsJs.get(key, replacementsJs)
+                    if (value != Scriptable.NOT_FOUND) {
+                        replacements[key] = ScriptRuntime.toString(value)
+                    }
+                }
+            }
+
+            val result = structureApi.replaceBlocks(structureData, replacements)
+
+            // Convert back to JS
+            return convertToJS(cx, scope, result)
+        }
+
+        private fun convertToJS(cx: Context, scope: Scriptable, value: Any?): Any? {
+            return when (value) {
+                null -> null
+                is Map<*, *> -> {
+                    val jsObj = cx.newObject(scope)
+                    value.forEach { (k, v) ->
+                        jsObj.put(k.toString(), jsObj, convertToJS(cx, scope, v))
+                    }
+                    jsObj
+                }
+                is List<*> -> {
+                    val jsArray = cx.newArray(scope, value.size)
+                    value.forEachIndexed { index, item ->
+                        jsArray.put(index, jsArray, convertToJS(cx, scope, item))
+                    }
+                    jsArray
+                }
+                is String, is Number, is Boolean -> value
+                else -> Context.javaToJS(value, scope)
+            }
+        }
+    }
+
+    /**
+     * BlocksList function - list blocks with counts
+     */
+    private class BlocksListFunction(private val structureApi: StructureAPI) : BaseFunction() {
+        override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<Any?>): Any? {
+            if (args.isEmpty()) {
+                throw ScriptRuntime.typeError("blocksList() requires 1 argument: path")
+            }
+
+            val path = ScriptRuntime.toString(args[0])
+            val blockCounts = structureApi.blocksList(path)
+
+            // Convert map to JavaScript object
+            val jsObj = cx.newObject(scope)
+            blockCounts.forEach { (blockId, count) ->
+                jsObj.put(blockId, jsObj, count)
+            }
+            return jsObj
+        }
+    }
+
+    /**
+     * BlocksReplace function - replace blocks according to map
+     */
+    private class BlocksReplaceFunction(private val structureApi: StructureAPI) : BaseFunction() {
+        override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<Any?>): Any? {
+            if (args.size < 2) {
+                throw ScriptRuntime.typeError("blocksReplace() requires 2 arguments: path, replacementMap")
+            }
+
+            val path = ScriptRuntime.toString(args[0])
+
+            // Convert JS object to Kotlin map
+            val jsMap = args[1] as? Scriptable
+                ?: throw ScriptRuntime.typeError("Second argument must be an object")
+
+            val replacementMap = mutableMapOf<String, String>()
+            jsMap.ids.forEach { id ->
+                val key = id.toString()
+                val value = jsMap.get(key, jsMap)
+                if (value != Scriptable.NOT_FOUND) {
+                    replacementMap[key] = ScriptRuntime.toString(value)
+                }
+            }
+
+            structureApi.blocksReplace(path, replacementMap)
+            return null
+        }
+    }
+
+    /**
+     * BlocksReplaceVanilla function - replace modded blocks with vanilla
+     */
+    private class BlocksReplaceVanillaFunction(private val structureApi: StructureAPI) : BaseFunction() {
+        override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<Any?>): Any? {
+            if (args.isEmpty()) {
+                throw ScriptRuntime.typeError("blocksReplaceVanilla() requires at least 1 argument: path")
+            }
+
+            val path = ScriptRuntime.toString(args[0])
+
+            // Optional type overrides
+            val typeOverrides = if (args.size > 1 && args[1] != null && args[1] != org.mozilla.javascript.Undefined.instance) {
+                val jsMap = args[1] as? Scriptable
+                    ?: throw ScriptRuntime.typeError("Second argument must be an object")
+
+                val overrides = mutableMapOf<String, String>()
+                jsMap.ids.forEach { id ->
+                    val key = id.toString()
+                    val value = jsMap.get(key, jsMap)
+                    if (value != Scriptable.NOT_FOUND) {
+                        overrides[key] = ScriptRuntime.toString(value)
+                    }
+                }
+                overrides
+            } else {
+                null
+            }
+
+            val warnings = structureApi.blocksReplaceVanilla(path, typeOverrides)
+
+            // Return warnings as JavaScript array
+            val jsArray = cx.newArray(scope, warnings.size)
+            warnings.forEachIndexed { index, warning ->
+                jsArray.put(index, jsArray, warning)
+            }
+            return jsArray
         }
     }
 }

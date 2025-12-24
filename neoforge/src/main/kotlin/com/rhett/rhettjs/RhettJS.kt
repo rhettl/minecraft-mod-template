@@ -10,6 +10,7 @@ import net.neoforged.fml.common.Mod
 import net.neoforged.fml.loading.FMLPaths
 import net.neoforged.neoforge.common.NeoForge
 import net.neoforged.neoforge.event.RegisterCommandsEvent
+import net.neoforged.neoforge.event.server.ServerStartedEvent
 import net.neoforged.neoforge.event.server.ServerStartingEvent
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import net.neoforged.neoforge.event.tick.ServerTickEvent
@@ -66,6 +67,10 @@ class RhettJS(modEventBus: IEventBus) {
         fun onRegisterCommands(event: RegisterCommandsEvent) {
             RJSCommand.register(event.dispatcher)
             ConfigManager.debug("Registered /rjs command")
+
+            // Register custom commands from startup scripts
+            com.rhett.rhettjs.commands.CustomCommandRegistry.registerCommands(event.dispatcher)
+            ConfigManager.debug("Registered custom commands")
         }
     }
 
@@ -75,7 +80,12 @@ class RhettJS(modEventBus: IEventBus) {
     object LifecycleHandler {
         @SubscribeEvent
         fun onServerStarting(event: ServerStartingEvent) {
-            ScriptSystemInitializer.initialize(event.server.serverDirectory)
+            ScriptSystemInitializer.initialize(event.server)
+        }
+
+        @SubscribeEvent
+        fun onServerStarted(event: ServerStartedEvent) {
+            ScriptSystemInitializer.reinitializeWithWorldPaths(event.server)
         }
 
         @SubscribeEvent

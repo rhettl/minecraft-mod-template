@@ -35,6 +35,7 @@ function Commander(args) {
  * Long flags: --fix → flags.fix = true
  * Short flags: -f → flags.f = true
  * Combined short flags: -fgj → flags.f, flags.g, flags.j = true
+ * Negative numbers: -100 → positional (not a flag)
  */
 Commander.prototype._parse = function() {
   for (let i = 0; i < this.args.length; i++) {
@@ -43,13 +44,14 @@ Commander.prototype._parse = function() {
     if (arg.startsWith('--')) {
       // Long flag: --fix
       this.flags[arg.substring(2)] = true;
-    } else if (arg.startsWith('-') && arg.length > 1) {
+    } else if (arg.startsWith('-') && arg.length > 1 && isNaN(arg)) {
       // Short flag(s): -f or -fgj
+      // But NOT negative numbers like -100
       for (let j = 1; j < arg.length; j++) {
         this.flags[arg[j]] = true;
       }
     } else {
-      // Positional argument
+      // Positional argument (including negative numbers)
       this.positional.push(arg);
     }
   }

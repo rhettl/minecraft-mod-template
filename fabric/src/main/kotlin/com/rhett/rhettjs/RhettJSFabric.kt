@@ -29,10 +29,14 @@ class RhettJSFabric : ModInitializer {
 
         ConfigManager.debug("RhettJS initialization starting")
 
-        // Register command
+        // Register commands
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
             RJSCommand.register(dispatcher)
             ConfigManager.debug("Registered /rjs command")
+
+            // Register custom commands from startup scripts
+            com.rhett.rhettjs.commands.CustomCommandRegistry.registerCommands(dispatcher)
+            ConfigManager.debug("Registered custom commands")
         }
 
         // Register tick handler for schedule() processing
@@ -43,7 +47,11 @@ class RhettJSFabric : ModInitializer {
 
         // Register server lifecycle events
         ServerLifecycleEvents.SERVER_STARTING.register { server ->
-            ScriptSystemInitializer.initialize(server.serverDirectory)
+            ScriptSystemInitializer.initialize(server)
+        }
+
+        ServerLifecycleEvents.SERVER_STARTED.register { server ->
+            ScriptSystemInitializer.reinitializeWithWorldPaths(server)
         }
 
         ServerLifecycleEvents.SERVER_STOPPING.register { _ ->

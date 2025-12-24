@@ -150,6 +150,11 @@ object RJSCommand {
         // Create caller API for chat messages
         val callerAPI = CallerAPI(source)
 
+        // Create Command API for command execution
+        val player = source.player  // May be null if run from console
+        val commandAPI = com.rhett.rhettjs.api.CommandAPI(source.server, player)
+        val commandWrapper = com.rhett.rhettjs.api.CommandAPIWrapper(commandAPI, source.server)
+
         // Create Args array wrapper for JavaScript
         // ScriptEngine will convert this to a proper JavaScript array with JS strings
         val argsArray = args.toTypedArray()
@@ -159,6 +164,7 @@ object RJSCommand {
             try {
                 ScriptEngine.executeScript(script, mapOf(
                     "Caller" to callerAPI,
+                    "Command" to commandWrapper,
                     "Args" to argsArray
                 ))
             } catch (e: Exception) {

@@ -171,11 +171,12 @@ class NBTAPI(
             throw SecurityException("Absolute paths not allowed: $path")
         }
 
-        // Resolve and normalize
-        val resolved = baseDir.resolve(path).normalize()
+        // Resolve and normalize both paths for comparison
+        val normalizedBase = baseDir.toAbsolutePath().normalize()
+        val resolved = normalizedBase.resolve(path).normalize()
 
         // Ensure result is within base directory
-        if (!resolved.startsWith(baseDir)) {
+        if (!resolved.startsWith(normalizedBase)) {
             throw SecurityException("Path must be within structures directory: $path")
         }
 

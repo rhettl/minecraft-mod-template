@@ -74,7 +74,7 @@ class StartupEventsAPITest {
             )
 
             // Should have registered one handler
-            val handlers = StartupEventsAPI.getHandlers("item")
+            val handlers = StartupEventsAPI.getRegistryHandlers("item")
             assertEquals(1, handlers.size, "Should register one item handler")
         } finally {
             Context.exit()
@@ -101,7 +101,7 @@ class StartupEventsAPITest {
                 null
             )
 
-            val handlers = StartupEventsAPI.getHandlers("block")
+            val handlers = StartupEventsAPI.getRegistryHandlers("block")
             assertEquals(1, handlers.size, "Should register one block handler")
         } finally {
             Context.exit()
@@ -128,7 +128,7 @@ class StartupEventsAPITest {
                 null
             )
 
-            val handlers = StartupEventsAPI.getHandlers("item")
+            val handlers = StartupEventsAPI.getRegistryHandlers("item")
             assertEquals(3, handlers.size, "Should register three item handlers")
         } finally {
             Context.exit()
@@ -154,8 +154,8 @@ class StartupEventsAPITest {
                 null
             )
 
-            assertEquals(1, StartupEventsAPI.getHandlers("item").size)
-            assertEquals(1, StartupEventsAPI.getHandlers("block").size)
+            assertEquals(1, StartupEventsAPI.getRegistryHandlers("item").size)
+            assertEquals(1, StartupEventsAPI.getRegistryHandlers("block").size)
         } finally {
             Context.exit()
         }
@@ -163,7 +163,7 @@ class StartupEventsAPITest {
 
     @Test
     fun `test getHandlers returns empty list for unregistered type`() {
-        val handlers = StartupEventsAPI.getHandlers("nonexistent")
+        val handlers = StartupEventsAPI.getRegistryHandlers("nonexistent")
         assertEquals(0, handlers.size, "Should return empty list for unregistered type")
     }
 
@@ -186,13 +186,13 @@ class StartupEventsAPITest {
                 null
             )
 
-            assertEquals(1, StartupEventsAPI.getHandlers("item").size)
-            assertEquals(1, StartupEventsAPI.getHandlers("block").size)
+            assertEquals(1, StartupEventsAPI.getRegistryHandlers("item").size)
+            assertEquals(1, StartupEventsAPI.getRegistryHandlers("block").size)
 
             StartupEventsAPI.clear()
 
-            assertEquals(0, StartupEventsAPI.getHandlers("item").size)
-            assertEquals(0, StartupEventsAPI.getHandlers("block").size)
+            assertEquals(0, StartupEventsAPI.getRegistryHandlers("item").size)
+            assertEquals(0, StartupEventsAPI.getRegistryHandlers("block").size)
         } finally {
             Context.exit()
         }
@@ -355,8 +355,8 @@ class StartupEventsAPITest {
     }
 
     @Test
-    fun `test getSupportedTypes returns expected types`() {
-        val types = StartupEventsAPI.getSupportedTypes()
+    fun `test getSupportedRegistryTypes returns expected types`() {
+        val types = StartupEventsAPI.getSupportedRegistryTypes()
 
         assertTrue(types.contains("item"), "Should support 'item' registry")
         assertTrue(types.contains("block"), "Should support 'block' registry")

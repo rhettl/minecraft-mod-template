@@ -619,7 +619,7 @@ class ScriptEngineTest {
         assertEquals(false, (result as ScriptResult.Success).value, "Handler should not be executed yet")
 
         // Verify handler was registered
-        val handlers = com.rhett.rhettjs.events.StartupEventsAPI.getHandlers("item")
+        val handlers = com.rhett.rhettjs.events.StartupEventsAPI.getRegistryHandlers("item")
         assertEquals(1, handlers.size, "One handler should be registered")
 
         com.rhett.rhettjs.events.StartupEventsAPI.clear()

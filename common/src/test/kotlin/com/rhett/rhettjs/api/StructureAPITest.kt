@@ -282,4 +282,140 @@ class StructureAPITest {
         val file = structuresDir.resolve("village/house_1.nbt")
         assertEquals(1, Files.walk(structuresDir).filter { it.toString().endsWith(".nbt") }.count())
     }
+
+    // ====== Path Resolver Tests ======
+
+    @Test
+    fun `test resolveStructurePath with direct path`() {
+        // Create test structure
+        Files.createDirectories(structuresDir.resolve("custom"))
+        structuresDir.resolve("custom/castle.nbt").writeText("")
+
+        val resolved = structureApi.resolveStructurePath("custom/castle")
+
+        assertNotNull(resolved, "Should resolve direct path")
+        assertTrue(resolved!!.exists(), "Resolved path should exist")
+        assertTrue(resolved.toString().endsWith("custom/castle.nbt"))
+    }
+
+    @Test
+    fun `test resolveStructurePath with captured directory`() {
+        // Create test structure in captured/
+        Files.createDirectories(structuresDir.resolve("captured"))
+        structuresDir.resolve("captured/house.nbt").writeText("")
+
+        val resolved = structureApi.resolveStructurePath("house")
+
+        assertNotNull(resolved, "Should resolve from captured directory")
+        assertTrue(resolved!!.exists(), "Resolved path should exist")
+        assertTrue(resolved.toString().endsWith("captured/house.nbt"))
+    }
+
+    @Test
+    fun `test resolveStructurePath with namespace prefix`() {
+        // Create test structure
+        Files.createDirectories(structuresDir.resolve("captured"))
+        structuresDir.resolve("captured/temple.nbt").writeText("")
+
+        val resolved = structureApi.resolveStructurePath("minecraft:temple")
+
+        assertNotNull(resolved, "Should strip namespace and resolve")
+        assertTrue(resolved!!.exists(), "Resolved path should exist")
+        assertTrue(resolved.toString().endsWith("captured/temple.nbt"))
+    }
+
+    @Test
+    fun `test resolveStructurePath with nbt extension`() {
+        // Create test structure
+        Files.createDirectories(structuresDir.resolve("captured"))
+        structuresDir.resolve("captured/bridge.nbt").writeText("")
+
+        val resolved1 = structureApi.resolveStructurePath("bridge")
+        val resolved2 = structureApi.resolveStructurePath("bridge.nbt")
+
+        assertNotNull(resolved1, "Should work without extension")
+        assertNotNull(resolved2, "Should work with extension")
+        assertEquals(resolved1, resolved2, "Both should resolve to same path")
+    }
+
+    @Test
+    fun `test resolveStructurePath returns null for nonexistent`() {
+        val resolved = structureApi.resolveStructurePath("nonexistent")
+        assertNull(resolved, "Should return null for nonexistent structure")
+    }
+
+    @Test
+    fun `test resolveLargeStructurePath finds large structure`() {
+        // Create large structure directory structure
+        val piecesDir = structuresDir.resolve("pieces/castle")
+        val largeDir = structuresDir.resolve("large")
+
+        Files.createDirectories(piecesDir)
+        Files.createDirectories(largeDir)
+
+        // Create piece files
+        piecesDir.resolve("0.0.0.nbt").writeText("")
+        piecesDir.resolve("1.0.0.nbt").writeText("")
+
+        // Create metadata
+        largeDir.resolve("castle.json").writeText("""
+            {
+                "description": "Test large structure",
+                "piece_size": {"x": 48, "z": 48}
+            }
+        """.trimIndent())
+
+        val resolved = structureApi.resolveLargeStructurePath("castle")
+
+        assertNotNull(resolved, "Should resolve large structure path")
+        assertEquals(structuresDir, resolved, "Should return base structures directory")
+    }
+
+    @Test
+    fun `test resolveLargeStructurePath with namespace prefix`() {
+        // Create large structure
+        val piecesDir = structuresDir.resolve("pieces/village")
+        val largeDir = structuresDir.resolve("large")
+
+        Files.createDirectories(piecesDir)
+        Files.createDirectories(largeDir)
+
+        piecesDir.resolve("0.0.0.nbt").writeText("")
+        largeDir.resolve("village.json").writeText("{}")
+
+        val resolved = structureApi.resolveLargeStructurePath("minecraft:village")
+
+        assertNotNull(resolved, "Should strip namespace and resolve")
+        assertEquals(structuresDir, resolved)
+    }
+
+    @Test
+    fun `test resolveLargeStructurePath returns null if pieces missing`() {
+        // Create only metadata, no pieces directory
+        val largeDir = structuresDir.resolve("large")
+        Files.createDirectories(largeDir)
+        largeDir.resolve("incomplete.json").writeText("{}")
+
+        val resolved = structureApi.resolveLargeStructurePath("incomplete")
+
+        assertNull(resolved, "Should return null if pieces directory missing")
+    }
+
+    @Test
+    fun `test resolveLargeStructurePath returns null if metadata missing`() {
+        // Create only pieces directory, no metadata
+        val piecesDir = structuresDir.resolve("pieces/incomplete")
+        Files.createDirectories(piecesDir)
+        piecesDir.resolve("0.0.0.nbt").writeText("")
+
+        val resolved = structureApi.resolveLargeStructurePath("incomplete")
+
+        assertNull(resolved, "Should return null if metadata missing")
+    }
+
+    @Test
+    fun `test resolveLargeStructurePath returns null for nonexistent`() {
+        val resolved = structureApi.resolveLargeStructurePath("nonexistent")
+        assertNull(resolved, "Should return null for nonexistent large structure")
+    }
 }

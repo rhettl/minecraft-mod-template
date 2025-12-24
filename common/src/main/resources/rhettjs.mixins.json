@@ -3,7 +3,9 @@
   "package": "com.rhett.rhettjs.mixin",
   "compatibilityLevel": "JAVA_21",
   "refmap": "rhettjs-common-refmap.json",
-  "mixins": [],
+  "mixins": [
+    "PackRepositoryMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }
