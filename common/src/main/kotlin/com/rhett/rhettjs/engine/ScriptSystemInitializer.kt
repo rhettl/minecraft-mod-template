@@ -13,6 +13,7 @@ import com.rhett.rhettjs.worldgen.DatapackGenerator
 import net.minecraft.server.MinecraftServer
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import kotlin.io.path.exists
 
 /**
@@ -22,122 +23,60 @@ import kotlin.io.path.exists
 object ScriptSystemInitializer {
 
     /**
-     * Initialize the script system on server start.
-     *
-     * @param server The Minecraft server instance
+     * Initialize startup scripts and globals during mod initialization.
+     * This runs BEFORE datapacks load so dimensions are ready.
      */
-    fun initialize(server: MinecraftServer) {
-        val serverDirectory = server.serverDirectory
-        ConfigManager.debug("Server starting, initializing script system")
+    fun initializeStartupScripts() {
+        RhettJSCommon.LOGGER.info("[RhettJS] Loading startup scripts (mod initialization)...")
 
-        val scriptsDir = getScriptsDirectory(serverDirectory)
+        val scriptsDir = getScriptsDirectory(null)
         ConfigManager.debug("Script directory: $scriptsDir")
 
         // Ensure script directories exist
         createDirectories(scriptsDir)
 
-        // Initialize Structure API
-        initializeStructureAPI(serverDirectory)
-
-        // Initialize World API
-        initializeWorldAPI(server)
-
         // Scan for scripts
         RhettJSCommon.LOGGER.info("[RhettJS] Scanning for scripts...")
         ScriptRegistry.scan(scriptsDir)
 
-        // Load global libraries
+        // Load global libraries ONCE
         GlobalsLoader.reload(scriptsDir)
         ConfigManager.debug("Loaded global libraries")
 
-        // Execute startup scripts
+        // Execute startup scripts (direct registries like items/blocks)
+        // Note: Dimensions use datapack JSON files, not script registration
         executeStartupScripts()
 
-        // Register worldgen (dimensions, biomes, etc.)
-        registerWorldgen(scriptsDir)
-
-        // Load server scripts (register event handlers)
-        loadServerScripts()
-
-        RhettJSCommon.LOGGER.info("[RhettJS] Ready! Use /rjs list to see available scripts")
-        ConfigManager.debug("Script system initialization complete")
+        RhettJSCommon.LOGGER.info("[RhettJS] Startup scripts initialized")
     }
 
     /**
-     * Register worldgen elements (dimensions, biomes) from startup scripts.
-     * Note: This must be called BEFORE the server loads worlds.
-     */
-    private fun registerWorldgen(scriptsDir: Path) {
-        RhettJSCommon.LOGGER.info("[RhettJS] Registering worldgen elements...")
-
-        // Clear previous registrations
-        DimensionRegistry.clear()
-
-        // Create a temporary scope for executing worldgen registration scripts
-        val cx = org.mozilla.javascript.Context.enter()
-        try {
-            cx.optimizationLevel = -1
-            cx.languageVersion = org.mozilla.javascript.Context.VERSION_ES6
-
-            val scope = ScriptEngine.createScope(ScriptCategory.STARTUP)
-
-            // Execute worldgen registrations and collect dimension configs
-            val dimensionConfigs = StartupEventsAPI.executeWorldgenRegistrations("dimension", scope)
-
-            // Register each dimension
-            dimensionConfigs.forEach { config ->
-                DimensionRegistry.registerDimension(config)
-            }
-
-            ConfigManager.debug("Registered ${dimensionConfigs.size} dimensions")
-
-        } finally {
-            org.mozilla.javascript.Context.exit()
-        }
-    }
-
-    /**
-     * Generate dimension datapack files after server has started.
-     * This generates files in world/datapacks/rhettjs/ for next restart.
+     * Initialize server resources on server start.
+     * Note: Startup and server scripts have already loaded earlier.
      *
      * @param server The Minecraft server instance
      */
-    fun generateDimensionDatapack(server: MinecraftServer) {
-        val dimensions = DimensionRegistry.getRegisteredDimensions()
+    fun initialize(server: MinecraftServer) {
+        val serverDirectory = server.serverDirectory
+        ConfigManager.debug("Server starting, initializing server resources")
 
-        if (dimensions.isEmpty()) {
-            return
-        }
+        // Initialize Structure API (needs server directory)
+        initializeStructureAPI(serverDirectory)
 
-        try {
-            // Get world/datapacks/rhettjs/ directory
-            val worldPath = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
-            val datapacksDir = worldPath.resolve("datapacks")
-            val rhettjsDatapackDir = datapacksDir.resolve("rhettjs")
+        // Initialize World API (needs server instance)
+        initializeWorldAPI(server)
 
-            // Create directories
-            Files.createDirectories(rhettjsDatapackDir)
+        // Register custom commands (server scripts have loaded early and registered handlers)
+        com.rhett.rhettjs.commands.CustomCommandRegistry.registerCommands()
 
-            // Generate pack.mcmeta
-            DatapackGenerator.generatePackMeta(rhettjsDatapackDir)
-
-            // Generate dimension JSON files
-            DatapackGenerator.generateDimensions(rhettjsDatapackDir, dimensions)
-
-            // Clean up old dimension files
-            val registeredNames = dimensions.values.map { it.name }.toSet()
-            DatapackGenerator.cleanupUnregisteredDimensions(rhettjsDatapackDir, registeredNames)
-
-            RhettJSCommon.LOGGER.warn("[RhettJS] Dimension datapack generated at world/datapacks/rhettjs/")
-            RhettJSCommon.LOGGER.warn("[RhettJS] Server restart required for dimension changes to take effect!")
-
-        } catch (e: Exception) {
-            RhettJSCommon.LOGGER.error("[RhettJS] Failed to generate dimension datapack", e)
-        }
+        RhettJSCommon.LOGGER.info("[RhettJS] Ready! Use /rjs list to see available scripts")
+        ConfigManager.debug("Server resources initialization complete")
     }
 
     /**
-     * Reload all scripts (used by /rjs reload command).
+     * Reload scripts (used by /rjs reload command).
+     * Reloads: globals, server scripts (via data pack reload), utility scripts (reindex).
+     * Does NOT reload: startup scripts (require full restart).
      * Note: Does not reinitialize APIs (Structure, World) as they persist across reloads.
      *
      * @param serverDirectory The server's root directory
@@ -145,13 +84,13 @@ object ScriptSystemInitializer {
     fun reload(serverDirectory: Path) {
         val scriptsDir = getScriptsDirectory(serverDirectory)
 
-        // Clear all event handlers and globals
-        RhettJSCommon.LOGGER.info("[RhettJS] Clearing event handlers...")
-        StartupEventsAPI.clear()
+        RhettJSCommon.LOGGER.info("[RhettJS] Reloading scripts...")
+
+        // Clear server event handlers and globals (NOT startup - those don't reload)
         ServerEventsAPI.clear()
         GlobalsLoader.clear()
 
-        // Rescan all scripts
+        // Rescan all scripts (including utility scripts for reindexing)
         RhettJSCommon.LOGGER.info("[RhettJS] Rescanning scripts...")
         ScriptRegistry.scan(scriptsDir)
 
@@ -159,20 +98,24 @@ object ScriptSystemInitializer {
         RhettJSCommon.LOGGER.info("[RhettJS] Reloading globals...")
         GlobalsLoader.reload(scriptsDir)
 
-        // Re-execute startup scripts
-        executeStartupScripts()
-
-        // Re-register worldgen (dimensions will be re-registered)
-        registerWorldgen(scriptsDir)
-
-        // Reload server scripts (re-register event handlers)
-        loadServerScripts()
+        // Note: Server scripts will reload on next data pack reload via ServerScriptManager
+        // Startup scripts are NOT reloaded (require full server restart)
+        RhettJSCommon.LOGGER.info("[RhettJS] Server scripts will reload on next /reload (data pack reload)")
+        RhettJSCommon.LOGGER.warn("[RhettJS] Startup scripts NOT reloaded - full restart required for dimension changes")
     }
 
     /**
      * Get the scripts directory, checking for testing mode.
+     *
+     * @param serverDirectory The server directory, or null during mod initialization
+     * @return The scripts directory path
      */
-    private fun getScriptsDirectory(serverDirectory: Path): Path {
+    private fun getScriptsDirectory(serverDirectory: Path?): Path {
+        // During mod init, we don't have server directory yet
+        if (serverDirectory == null) {
+            return Paths.get("rjs")
+        }
+
         val baseScriptsDir = serverDirectory.resolve("rjs")
 
         // Check if in-game testing mode is enabled
@@ -280,23 +223,6 @@ object ScriptSystemInitializer {
         ConfigManager.debug("Startup handlers registered")
     }
 
-    /**
-     * Load server scripts (register event handlers).
-     */
-    private fun loadServerScripts() {
-        val serverScripts = ScriptRegistry.getScripts(ScriptCategory.SERVER)
-        if (serverScripts.isNotEmpty()) {
-            RhettJSCommon.LOGGER.info("[RhettJS] Loading ${serverScripts.size} server scripts...")
-            serverScripts.forEach { script ->
-                try {
-                    ScriptEngine.executeScript(script)
-                    ConfigManager.debug("Loaded server script: ${script.name}")
-                } catch (e: Exception) {
-                    RhettJSCommon.LOGGER.error("[RhettJS] Failed to load server script: ${script.name}", e)
-                }
-            }
-        }
-    }
 
     /**
      * Create script category directories.

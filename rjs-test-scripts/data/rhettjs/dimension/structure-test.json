@@ -5,7 +5,9 @@
     "settings": {
       "biome": "minecraft:plains",
       "layers": [],
-      "structure_overrides": []
+      "features": false,
+      "lakes": false,
+      "structure_overrides": {}
     }
   }
 }

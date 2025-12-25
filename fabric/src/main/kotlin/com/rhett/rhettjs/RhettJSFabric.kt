@@ -29,14 +29,20 @@ class RhettJSFabric : ModInitializer {
 
         ConfigManager.debug("RhettJS initialization starting")
 
+        // Load globals and startup scripts early (dimensions, registries)
+        ScriptSystemInitializer.initializeStartupScripts()
+
+        // Register block event handlers
+        com.rhett.rhettjs.events.FabricBlockEventHandler.register()
+        ConfigManager.debug("Registered block event handlers")
+
         // Register commands
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
             RJSCommand.register(dispatcher)
             ConfigManager.debug("Registered /rjs command")
 
-            // Register custom commands from startup scripts
-            com.rhett.rhettjs.commands.CustomCommandRegistry.registerCommands(dispatcher)
-            ConfigManager.debug("Registered custom commands")
+            // Store dispatcher for custom commands (registered after startup scripts)
+            com.rhett.rhettjs.commands.CustomCommandRegistry.storeDispatcher(dispatcher)
         }
 
         // Register tick handler for schedule() processing

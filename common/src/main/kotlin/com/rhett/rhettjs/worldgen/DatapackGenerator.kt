@@ -125,11 +125,8 @@ object DatapackGenerator {
             // Monster spawn light level
             val monsterSpawnLightLevel = JsonObject().apply {
                 addProperty("type", "minecraft:uniform")
-                val value = JsonObject().apply {
-                    addProperty("min_inclusive", 0)
-                    addProperty("max_inclusive", 7)
-                }
-                add("value", value)
+                addProperty("min_inclusive", 0)
+                addProperty("max_inclusive", 7)
             }
             add("monster_spawn_light_level", monsterSpawnLightLevel)
 
@@ -164,39 +161,19 @@ object DatapackGenerator {
                 when (config.generator) {
                     DimensionRegistry.GeneratorType.FLAT -> {
                         addProperty("type", "minecraft:flat")
-
-                        val settings = JsonObject().apply {
-                            // Biome
-                            addProperty("biome", "minecraft:${config.biome}")
-
-                            // Layers (empty for void)
-                            add("layers", gson.toJsonTree(emptyList<Any>()))
-
-                            // Lakes (none)
-                            addProperty("lakes", false)
-
-                            // Features (none)
-                            addProperty("features", false)
-
-                            // Structures
-                            val structures = JsonObject().apply {
-                                add("structures", JsonObject())
-                            }
-                            add("structure_overrides", structures)
-                        }
-                        add("settings", settings)
+                        add("settings", generateFlatSettings(config))
                     }
                     DimensionRegistry.GeneratorType.VOID -> {
                         // Flat generator with no layers = void
                         addProperty("type", "minecraft:flat")
-
-                        val settings = JsonObject().apply {
-                            addProperty("biome", "minecraft:${config.biome}")
-                            add("layers", gson.toJsonTree(emptyList<Any>()))
-                            addProperty("lakes", false)
-                            addProperty("features", false)
-                        }
-                        add("settings", settings)
+                        add("settings", generateVoidSettings(config))
+                    }
+                    DimensionRegistry.GeneratorType.NOISE -> {
+                        addProperty("type", "minecraft:noise")
+                        add("settings", generateNoiseSettings(config))
+                    }
+                    DimensionRegistry.GeneratorType.DEBUG -> {
+                        addProperty("type", "minecraft:debug")
                     }
                 }
             }
@@ -205,6 +182,70 @@ object DatapackGenerator {
 
         file.writeText(gson.toJson(json))
         RhettJSCommon.LOGGER.debug("[RhettJS] Generated dimension: ${config.name}")
+    }
+
+    /**
+     * Generate flat generator settings.
+     */
+    private fun generateFlatSettings(config: DimensionRegistry.DimensionConfig): JsonObject {
+        return JsonObject().apply {
+            addProperty("biome", "minecraft:${config.biome}")
+
+            // Layers
+            val layers = if (config.generatorSettings?.layers != null) {
+                // Custom layers from config
+                config.generatorSettings.layers.map { layer ->
+                    JsonObject().apply {
+                        addProperty("block", layer.block)
+                        addProperty("height", layer.height)
+                    }
+                }
+            } else {
+                // Default: empty (void)
+                emptyList()
+            }
+            add("layers", gson.toJsonTree(layers))
+
+            // Features and lakes
+            val features = config.generatorSettings?.features ?: false
+            val lakes = config.generatorSettings?.lakes ?: false
+            addProperty("features", features)
+            addProperty("lakes", lakes)
+
+            // Structure overrides
+            if (config.generatorSettings?.structureOverrides != null) {
+                add("structure_overrides", gson.toJsonTree(config.generatorSettings.structureOverrides))
+            } else {
+                add("structure_overrides", JsonObject())
+            }
+        }
+    }
+
+    /**
+     * Generate void generator settings (simpler version of flat).
+     */
+    private fun generateVoidSettings(config: DimensionRegistry.DimensionConfig): JsonObject {
+        return JsonObject().apply {
+            addProperty("biome", "minecraft:${config.biome}")
+            add("layers", gson.toJsonTree(emptyList<Any>()))
+            addProperty("features", false)
+            addProperty("lakes", false)
+        }
+    }
+
+    /**
+     * Generate noise generator settings (vanilla-like terrain).
+     */
+    private fun generateNoiseSettings(config: DimensionRegistry.DimensionConfig): JsonObject {
+        // Noise generator settings are complex and typically reference preset files
+        // For now, we'll use a basic overworld-like configuration
+        return JsonObject().apply {
+            addProperty("type", "minecraft:overworld")
+            addProperty("biome_source", JsonObject().apply {
+                addProperty("type", "minecraft:fixed")
+                addProperty("biome", "minecraft:${config.biome}")
+            }.toString())
+        }
     }
 
     /**

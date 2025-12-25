@@ -98,52 +98,39 @@ class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
     }
 
 
+    // ============================================================================
+    // Property-based API (preferred, matches event pattern)
+    // ============================================================================
+
     /**
-     * Get the caller's name.
-     *
-     * @return The caller's name (player name or "Server")
+     * The caller's name (player name or "Server").
+     * Property access - use `Caller.name` instead of `Caller.getName()`.
      */
     fun getName(): String {
         return source.displayName.string
     }
 
     /**
-     * Check if the caller is a player (vs console/command block).
+     * The caller's position with dimension.
+     * Property access - use `Caller.position` instead of `Caller.getPosition()`.
      *
-     * @return true if caller is a player
+     * Returns: { x, y, z, dimension }
      */
-    fun isPlayer(): Boolean {
-        return source.entity != null
-    }
-
-    /**
-     * Get the caller's current dimension.
-     *
-     * @return Dimension key (e.g., "minecraft:overworld", "minecraft:the_nether", "minecraft:the_end")
-     */
-    fun getDimension(): String {
-        return source.level.dimension().location().toString()
-    }
-
-    /**
-     * Get the caller's current position.
-     *
-     * @return Map with x, y, z coordinates (doubles)
-     */
-    fun getPosition(): Map<String, Double> {
+    fun getPosition(): Map<String, Any> {
         val pos = source.position
         return mapOf(
             "x" to pos.x,
             "y" to pos.y,
-            "z" to pos.z
+            "z" to pos.z,
+            "dimension" to source.level.dimension().location().toString()
         )
     }
 
     /**
-     * Get the caller's rotation (yaw and pitch).
-     * Only available if caller is an entity.
+     * The caller's rotation (yaw and pitch).
+     * Property access - use `Caller.rotation` instead of `Caller.getRotation()`.
      *
-     * @return Map with yaw and pitch (degrees), or null if caller is not an entity
+     * Returns: { yaw, pitch } or null if caller is not an entity
      */
     fun getRotation(): Map<String, Float>? {
         val entity = source.entity ?: return null
@@ -151,6 +138,50 @@ class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
             "yaw" to entity.yRot,
             "pitch" to entity.xRot
         )
+    }
+
+    /**
+     * The player object (ServerPlayer) if caller is a player, null otherwise.
+     * Property access - use `Caller.player`.
+     *
+     * Access the raw Minecraft player object for advanced operations:
+     * - player.inventory
+     * - player.addEffect(...)
+     * - player.level
+     * - etc.
+     *
+     * Use Runtime.inspect(Caller.player) to explore available methods.
+     *
+     * @return ServerPlayer instance or null if caller is console/command block
+     */
+    fun getPlayer(): net.minecraft.server.level.ServerPlayer? {
+        return source.entity as? net.minecraft.server.level.ServerPlayer
+    }
+
+    // ============================================================================
+    // Deprecated methods (kept for backward compatibility)
+    // ============================================================================
+
+    /**
+     * Check if the caller is a player (vs console/command block).
+     *
+     * @deprecated Use `Caller.player != null` instead
+     * @return true if caller is a player
+     */
+    @Deprecated("Use Caller.player != null instead", ReplaceWith("player != null"))
+    fun isPlayer(): Boolean {
+        return source.entity != null
+    }
+
+    /**
+     * Get the caller's current dimension.
+     *
+     * @deprecated Use `Caller.position.dimension` instead
+     * @return Dimension key (e.g., "minecraft:overworld", "minecraft:the_nether", "minecraft:the_end")
+     */
+    @Deprecated("Use Caller.position.dimension instead", ReplaceWith("position.dimension"))
+    fun getDimension(): String {
+        return source.level.dimension().location().toString()
     }
 
     /**

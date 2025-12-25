@@ -1,13 +1,14 @@
-// Register custom commands
-// This script runs once on server startup
+// Register custom BASIC commands
+// Basic commands use simple greedy string argument parsing
+// For typed arguments with autocomplete, see register-full-commands.js
 
 // Simple hello command
-StartupEvents.command('hello', event => {
+ServerEvents.basicCommand('hello', event => {
     event.sendSuccess('Hello, ' + event.getSenderName() + '!');
 });
 
 // Echo command with arguments
-StartupEvents.command('echo', event => {
+ServerEvents.basicCommand('echo', event => {
     if (event.args.length === 0) {
         event.sendError('Usage: /echo <message>');
         return;
@@ -18,7 +19,7 @@ StartupEvents.command('echo', event => {
 });
 
 // Info command showing event properties
-StartupEvents.command('myinfo', event => {
+ServerEvents.basicCommand('myinfo', event => {
     if (!event.isPlayer()) {
         event.sendError('This command can only be used by players');
         return;
@@ -32,7 +33,7 @@ StartupEvents.command('myinfo', event => {
 });
 
 // Heal command (requires op)
-StartupEvents.command('heal', event => {
+ServerEvents.basicCommand('heal', event => {
     if (!event.isPlayer()) {
         event.sendError('This command can only be used by players');
         return;
@@ -49,7 +50,7 @@ StartupEvents.command('heal', event => {
 });
 
 // Test command with multiple arguments
-StartupEvents.command('test', event => {
+ServerEvents.basicCommand('test', event => {
     event.sendMessage('§6=== Command Test ===');
     event.sendMessage('§7Command: §f/' + event.commandName);
     event.sendMessage('§7Arguments (' + event.args.length + '): §f' + (event.args.length > 0 ? event.args.join(', ') : '(none)'));
@@ -58,4 +59,4 @@ StartupEvents.command('test', event => {
     event.sendMessage('§7Is Server: §f' + event.isServer());
 });
 
-console.log('[RhettJS] Registered custom commands: /hello, /echo, /myinfo, /heal, /test');
+console.log('[RhettJS] Registered basic commands: /hello, /echo, /myinfo, /heal, /test');

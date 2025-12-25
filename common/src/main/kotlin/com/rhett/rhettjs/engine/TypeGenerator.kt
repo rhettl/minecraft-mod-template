@@ -141,6 +141,22 @@ object TypeGenerator {
             appendLine("     * Runtime.setEventLoopTimeout(120000); // 2 minute timeout for slow data migration")
             appendLine("     */")
             appendLine("    setEventLoopTimeout(timeoutMs: number): void;")
+            appendLine()
+            appendLine("    /**")
+            appendLine("     * Inspect a Java object using reflection to see available methods and fields.")
+            appendLine("     * Useful for exploring Minecraft API objects from JavaScript.")
+            appendLine("     *")
+            appendLine("     * @param obj The Java object to inspect")
+            appendLine("     * @returns Object containing class info, methods, fields, and superclass chain")
+            appendLine("     */")
+            appendLine("    inspect(obj: any): {")
+            appendLine("        class: string;")
+            appendLine("        simpleName: string;")
+            appendLine("        methods: string[];")
+            appendLine("        fields: string[];")
+            appendLine("        superclasses: string[];")
+            appendLine("        interfaces: string[];")
+            appendLine("    };")
             appendLine("};")
             appendLine()
 
@@ -174,15 +190,54 @@ object TypeGenerator {
                 }
             }
 
-            // Event APIs
+            // Store API - dynamically generated via reflection
+            appendLine("// ============================================================================")
+            appendLine("// Store API (Ephemeral Key-Value Storage)")
+            appendLine("// ============================================================================")
+            appendLine()
+            val storeDefinition = generateStoreApiDefinition()
+            if (storeDefinition != null) {
+                appendLine(storeDefinition)
+                appendLine()
+            }
+
+            // World API - dynamically generated via reflection
+            val worldApiDefinition = generateWorldApiDefinition()
+            if (worldApiDefinition != null) {
+                appendLine("// ============================================================================")
+                appendLine("// World API")
+                appendLine("// ============================================================================")
+                appendLine()
+                appendLine(worldApiDefinition)
+                appendLine()
+            }
+
+            // Command API - dynamically generated via reflection
+            val commandApiDefinition = generateCommandApiDefinition()
+            if (commandApiDefinition != null) {
+                appendLine("// ============================================================================")
+                appendLine("// Command API")
+                appendLine("// ============================================================================")
+                appendLine()
+                appendLine(commandApiDefinition)
+                appendLine()
+            }
+
+            // Event APIs - dynamically generated via reflection
             if (eventApis.isNotEmpty()) {
                 appendLine("// ============================================================================")
                 appendLine("// Event APIs")
                 appendLine("// ============================================================================")
                 appendLine()
                 eventApis.forEach { (name, _) ->
-                    appendLine("declare const $name: any;  // TODO: Add detailed type definitions")
-                    appendLine()
+                    val eventApiDefinition = generateEventApiDefinition(name)
+                    if (eventApiDefinition != null) {
+                        appendLine(eventApiDefinition)
+                        appendLine()
+                    } else {
+                        appendLine("declare const $name: any;  // Failed to generate types")
+                        appendLine()
+                    }
                 }
             }
 
@@ -192,38 +247,50 @@ object TypeGenerator {
             appendLine("// ============================================================================")
             appendLine()
 
-            // Generate Caller API dynamically by introspecting the class
-            val callerMethods = CallerAPI::class.java.declaredMethods
-                .filter { !it.isSynthetic && java.lang.reflect.Modifier.isPublic(it.modifiers) }
-                .map { method ->
-                    val params = method.parameters.mapIndexed { index, param ->
-                        val paramName = "arg$index"  // Java reflection doesn't preserve param names
-                        val paramType = TypeMapper.toTypeScript(param.parameterizedType)
-                        ReflectionIntrospector.Parameter(paramName, paramType, optional = false)
-                    }
-                    val returnType = TypeMapper.toTypeScript(method.genericReturnType)
-
-                    // Override parameter names for better DX
-                    val betterParams: List<ReflectionIntrospector.Parameter> = when (method.name) {
-                        "sendMessage", "sendSuccess", "sendError", "sendWarning", "sendInfo" ->
-                            listOf(ReflectionIntrospector.Parameter("message", "string", false))
-                        "sendRaw" ->
-                            listOf(ReflectionIntrospector.Parameter("json", "string", false))
-                        else -> params
-                    }
-
-                    ReflectionIntrospector.MethodSignature(method.name, betterParams, returnType)
-                }
-                .distinctBy { it.name }  // Remove overloads
-
+            // Generate Caller API with property-based access (matches event pattern)
+            appendLine("/** Raycast result from Caller.raycast() */")
+            appendLine("interface RaycastResult {")
+            appendLine("    hit: boolean;")
+            appendLine("    type: 'block' | 'miss' | 'unknown';")
+            appendLine("    x?: number;")
+            appendLine("    y?: number;")
+            appendLine("    z?: number;")
+            appendLine("    block?: string;")
+            appendLine("    face?: 'up' | 'down' | 'north' | 'south' | 'east' | 'west';")
+            appendLine("    distance: number;")
+            appendLine("}")
+            appendLine()
             appendLine("declare const Caller: {")
-            callerMethods.forEach { method ->
-                val params = method.parameters.joinToString(", ") { param ->
-                    val optional = if (param.optional) "?" else ""
-                    "${param.name}$optional: ${param.type}"
-                }
-                appendLine("    ${method.name}($params): ${method.returnType};")
-            }
+            appendLine("    // Property-based access (preferred, matches event pattern)")
+            appendLine("    /** The caller's name (player name or \\\"Server\\\") */")
+            appendLine("    readonly name: string;")
+            appendLine("    /** The caller's position and dimension */")
+            appendLine("    readonly position: { x: number; y: number; z: number; dimension: string };")
+            appendLine("    /** The caller's rotation (null if not an entity) */")
+            appendLine("    readonly rotation: { yaw: number; pitch: number } | null;")
+            appendLine("    /** The player object (null if caller is console/command block) */")
+            appendLine("    readonly player: any | null;")
+            appendLine()
+            appendLine("    // Helper methods")
+            appendLine("    sendMessage(message: string): void;")
+            appendLine("    sendSuccess(message: string): void;")
+            appendLine("    sendError(message: string): void;")
+            appendLine("    sendWarning(message: string): void;")
+            appendLine("    sendInfo(message: string): void;")
+            appendLine("    sendRaw(json: string): void;")
+            appendLine("    raycast(maxDistance?: number, includeFluid?: boolean): RaycastResult | null;")
+            appendLine()
+            appendLine("    // Deprecated methods (kept for backward compatibility)")
+            appendLine("    /** @deprecated Use Caller.player != null instead */")
+            appendLine("    isPlayer(): boolean;")
+            appendLine("    /** @deprecated Use Caller.position.dimension instead */")
+            appendLine("    getDimension(): string;")
+            appendLine("    /** @deprecated Use Caller.name instead */")
+            appendLine("    getName(): string;")
+            appendLine("    /** @deprecated Use Caller.position instead */")
+            appendLine("    getPosition(): { x: number; y: number; z: number; dimension: string };")
+            appendLine("    /** @deprecated Use Caller.rotation instead */")
+            appendLine("    getRotation(): { yaw: number; pitch: number } | null;")
             appendLine("};")
             appendLine()
 
@@ -535,6 +602,281 @@ object TypeGenerator {
     }
 
 
+
+    /**
+     * Generate Store API definition with namespace support.
+     */
+    private fun generateStoreApiDefinition(): String? {
+        return try {
+            buildString {
+                appendLine("/**")
+                appendLine(" * Namespaced store for organizing related data.")
+                appendLine(" * Provides scoped key-value operations within a namespace.")
+                appendLine(" */")
+                appendLine("interface NamespacedStore {")
+                appendLine("    /** Store a value under a key in this namespace */")
+                appendLine("    set(key: string, value: any): void;")
+                appendLine("    /** Retrieve a value by key from this namespace */")
+                appendLine("    get(key: string): any;")
+                appendLine("    /** Check if a key exists in this namespace */")
+                appendLine("    has(key: string): boolean;")
+                appendLine("    /** Delete a key from this namespace */")
+                appendLine("    delete(key: string): boolean;")
+                appendLine("    /** Clear all keys in this namespace only */")
+                appendLine("    clear(): void;")
+                appendLine("    /** Get all keys in this namespace */")
+                appendLine("    keys(): string[];")
+                appendLine("    /** Get the number of items in this namespace */")
+                appendLine("    size(): number;")
+                appendLine("    /** Get all entries in this namespace as a map */")
+                appendLine("    entries(): Record<string, any>;")
+                appendLine("}")
+                appendLine()
+                appendLine("/**")
+                appendLine(" * Ephemeral key-value store for sharing data across script executions.")
+                appendLine(" * Data persists in memory until server restart.")
+                appendLine(" *")
+                appendLine(" * @example")
+                appendLine(" * const positions = Store.namespace('positions');")
+                appendLine(" * positions.set('player1:pos1', { x: 100, y: 64, z: 200 });")
+                appendLine(" * const pos = positions.get('player1:pos1');")
+                appendLine(" */")
+                appendLine("declare const Store: {")
+                appendLine("    /** Create a namespaced store for organizing related data */")
+                appendLine("    namespace(namespace: string): NamespacedStore;")
+                appendLine("    /** Get all namespaces currently in use */")
+                appendLine("    namespaces(): string[];")
+                appendLine("    /** Clear all data across all namespaces */")
+                appendLine("    clearAll(): void;")
+                appendLine("    /** Get total number of items across all namespaces */")
+                appendLine("    size(): number;")
+                append("};")
+            }
+        } catch (e: Exception) {
+            println("Warning: Failed to generate Store API definition: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Generate World API definition dynamically via reflection.
+     */
+    private fun generateWorldApiDefinition(): String? {
+        return try {
+            val worldApi = ScriptEngine.worldAPI ?: return null
+
+            // Access the underlying WorldAPI via reflection
+            val worldApiField = worldApi.javaClass.getDeclaredField("worldApi")
+            worldApiField.isAccessible = true
+            val actualWorldApi = worldApiField.get(worldApi) as com.rhett.rhettjs.api.WorldAPI
+
+            // Introspect methods (synthetic methods already filtered by ReflectionIntrospector)
+            val methods = ReflectionIntrospector.introspectJavaObject(actualWorldApi)
+
+            // Manual parameter names for better DX (reflection doesn't preserve names)
+            val parameterOverrides = mapOf(
+                "grab" to listOf("world", "x1", "y1", "z1", "x2", "y2", "z2"),
+                "grabToFile" to listOf("world", "x1", "y1", "z1", "x2", "y2", "z2", "filename", "subdirectory?"),
+                "grabLarge" to listOf("world", "x1", "y1", "z1", "x2", "y2", "z2", "name", "pieceSize?", "namespace?"),
+                "placeLarge" to listOf("world", "x", "y", "z", "namespace", "name", "rotation?"),
+                "listLarge" to listOf("namespace?"),
+                "getLargeMetadata" to listOf("namespace", "name"),
+                "blocksListLarge" to listOf("namespace", "name"),
+                "blocksReplaceLarge" to listOf("namespace", "name", "replacementMap"),
+                "blocksReplaceLargeVanilla" to listOf("namespace", "name", "typeOverrides?")
+            )
+
+            // Better return types
+            val returnTypeOverrides = mapOf(
+                "grab" to "Record<string, any> | null",
+                "grabToFile" to "string",
+                "grabLarge" to "{ name: string; namespace: string; pieces: number; requires: string[]; path: string }",
+                "listLarge" to "Array<{ namespace: string; name: string; location: string }>",
+                "placeLarge" to "{ piecesPlaced: number; blocksPlaced: number; metadata: any; rotation: number; position: any }",
+                "getLargeMetadata" to "{ requires: string[]; pieceSize: any; gridSize: any; totalSize: any; pieceCount: number; location: string } | null",
+                "blocksListLarge" to "Record<string, number>",
+                "blocksReplaceLarge" to "number",
+                "blocksReplaceLargeVanilla" to "{ piecesModified: number; warnings: string[] }"
+            )
+
+            buildString {
+                appendLine("declare const World: {")
+
+                methods.forEach { method ->
+                    // Use manual parameter names if available
+                    val params = if (parameterOverrides.containsKey(method.name)) {
+                        parameterOverrides[method.name]!!.joinToString(", ") { paramSpec ->
+                            if (paramSpec.endsWith("?")) {
+                                val paramName = paramSpec.removeSuffix("?")
+                                // Infer type based on method
+                                val paramType = when {
+                                    paramName.startsWith("x") || paramName.startsWith("y") || paramName.startsWith("z")
+                                        || paramName.endsWith("1") || paramName.endsWith("2") -> "number"
+                                    paramName == "rotation" -> "number"
+                                    paramName == "pieceSize" -> "number[]"
+                                    paramName.endsWith("Map") -> "Record<string, string>"
+                                    paramName.endsWith("Overrides") -> "Record<string, string>"
+                                    else -> "string"
+                                }
+                                "$paramName?: $paramType"
+                            } else {
+                                // Required parameter
+                                val paramType = when {
+                                    paramSpec.startsWith("x") || paramSpec.startsWith("y") || paramSpec.startsWith("z")
+                                        || paramSpec.endsWith("1") || paramSpec.endsWith("2") -> "number"
+                                    paramSpec == "rotation" -> "number"
+                                    paramSpec == "pieceSize" -> "number[]"
+                                    paramSpec.endsWith("Map") -> "Record<string, string>"
+                                    paramSpec.endsWith("Overrides") -> "Record<string, string>"
+                                    else -> "string"
+                                }
+                                "$paramSpec: $paramType"
+                            }
+                        }
+                    } else {
+                        // Fall back to reflection
+                        method.parameters.joinToString(", ") { param ->
+                            val optional = if (param.optional) "?" else ""
+                            "${param.name}$optional: ${param.type}"
+                        }
+                    }
+
+                    // Use manual return type if available
+                    val returnType = returnTypeOverrides[method.name] ?: method.returnType
+
+                    appendLine("    ${method.name}($params): $returnType;")
+                }
+
+                append("};")
+            }
+        } catch (e: Exception) {
+            println("Warning: Failed to generate World API definition: ${e.message}")
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Generate Command API definition dynamically via reflection.
+     * Command API returns Promises (CompletableFuture in Java).
+     */
+    private fun generateCommandApiDefinition(): String? {
+        return try {
+            // Command API is injected dynamically, so we create a dummy instance to introspect
+            val dummyServer = null as? net.minecraft.server.MinecraftServer
+            if (dummyServer == null) {
+                // Can't create instance without server, use manual definition
+                return buildString {
+                    appendLine("/** Command execution result */")
+                    appendLine("interface CommandResult {")
+                    appendLine("    success: boolean;")
+                    appendLine("    resultCount: number;")
+                    appendLine("    feedback: string[];")
+                    appendLine("    error: string | null;")
+                    appendLine("}")
+                    appendLine()
+                    appendLine("/** Command execution API (available in command contexts and /rjs run) */")
+                    appendLine("declare const Command: {")
+                    appendLine("    /** Execute command as the caller (player). Returns Promise. */")
+                    appendLine("    execute(command: string): Promise<CommandResult>;")
+                    appendLine("    /** Execute command at specific position. Returns Promise. */")
+                    appendLine("    executeAt(x: number, y: number, z: number, command: string): Promise<CommandResult>;")
+                    appendLine("    /** Execute command as server/console. Returns Promise. */")
+                    appendLine("    executeAsServer(command: string): Promise<CommandResult>;")
+                    appendLine("    /** Get command suggestions for partial command. Returns Promise. */")
+                    appendLine("    suggest(partialCommand: string): Promise<string[]>;")
+                    append("};")
+                }
+            }
+
+            null
+        } catch (e: Exception) {
+            println("Warning: Failed to generate Command API definition: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Generate Event API definition dynamically via reflection.
+     * Handles ServerEvents and StartupEvents.
+     */
+    private fun generateEventApiDefinition(apiName: String): String? {
+        return try {
+            when (apiName) {
+                "ServerEvents" -> {
+                    val serverEventsApi = com.rhett.rhettjs.events.ServerEventsAPI
+                    val methods = ReflectionIntrospector.introspectJavaObject(serverEventsApi)
+                        .filter { it.name in setOf(
+                            "itemUse", "basicCommand", "command",
+                            "blockRightClicked", "blockLeftClicked", "blockPlaced", "blockBroken"
+                        )}
+
+                    buildString {
+                        appendLine("/** Block event data passed to block event handlers */")
+                        appendLine("interface BlockEvent {")
+                        appendLine("    position: { x: number; y: number; z: number; dimension: string };")
+                        appendLine("    block: { id: string; properties: Record<string, string> };")
+                        appendLine("    player?: { name: string; uuid: string; isCreative: boolean };")
+                        appendLine("    isRightClick?: boolean;")
+                        appendLine("    item?: { id: string; count: number; displayName?: string };")
+                        appendLine("    face?: string;")
+                        appendLine("    placedAgainst?: { x: number; y: number; z: number };")
+                        appendLine("    experience?: number;")
+                        appendLine("    drops?: Array<{ id: string; count: number }>;")
+                        appendLine("}")
+                        appendLine()
+                        appendLine("/** Command builder for creating typed commands */")
+                        appendLine("interface CommandBuilder {")
+                        appendLine("    types: any; // ArgumentTypeWrappers")
+                        appendLine("    addArgument(name: string, type: any): void;")
+                        appendLine("    setExecutor(handler: (context: any) => number): void;")
+                        appendLine("    requiresPermission(level: number): void;")
+                        appendLine("}")
+                        appendLine()
+                        appendLine("/** Runtime event handlers (available in server/ and scripts/) */")
+                        appendLine("declare const ServerEvents: {")
+                        appendLine("    /** Register handler for item use events */")
+                        appendLine("    itemUse(handler: (event: any) => void): void;")
+                        appendLine("    /** Register basic command with string arguments */")
+                        appendLine("    basicCommand(commandName: string, handler: (args: string) => void): void;")
+                        appendLine("    /** Register full Brigadier command with typed arguments */")
+                        appendLine("    command(commandName: string, builderFunction: (cmd: CommandBuilder) => void): void;")
+                        appendLine("    /** Register handler for block right-click events */")
+                        appendLine("    blockRightClicked(handler: (event: BlockEvent) => void): void;")
+                        appendLine("    blockRightClicked(blockFilter: string, handler: (event: BlockEvent) => void): void;")
+                        appendLine("    /** Register handler for block left-click events */")
+                        appendLine("    blockLeftClicked(handler: (event: BlockEvent) => void): void;")
+                        appendLine("    blockLeftClicked(blockFilter: string, handler: (event: BlockEvent) => void): void;")
+                        appendLine("    /** Register handler for block placement events */")
+                        appendLine("    blockPlaced(handler: (event: BlockEvent) => void): void;")
+                        appendLine("    blockPlaced(blockFilter: string, handler: (event: BlockEvent) => void): void;")
+                        appendLine("    /** Register handler for block breaking events */")
+                        appendLine("    blockBroken(handler: (event: BlockEvent) => void): void;")
+                        appendLine("    blockBroken(blockFilter: string, handler: (event: BlockEvent) => void): void;")
+                        append("};")
+                    }
+                }
+                "StartupEvents" -> {
+                    val startupEventsApi = com.rhett.rhettjs.events.StartupEventsAPI
+                    val methods = ReflectionIntrospector.introspectJavaObject(startupEventsApi)
+                        .filter { it.name == "registry" }
+
+                    buildString {
+                        appendLine("/** Startup event handlers (available in startup/ only) */")
+                        appendLine("declare const StartupEvents: {")
+                        appendLine("    /** Register handler for registry events (item, block) */")
+                        appendLine("    registry(type: 'item' | 'block', handler: (event: any) => void): void;")
+                        append("};")
+                    }
+                }
+                else -> null
+            }
+        } catch (e: Exception) {
+            println("Warning: Failed to generate Event API definition for $apiName: ${e.message}")
+            e.printStackTrace()
+            null
+        }
+    }
 
     /**
      * Generate README with IDE setup instructions.

@@ -634,7 +634,7 @@ class ScriptEngineTest {
             ServerEvents.itemUse(function(event) {
                 // Item use handler
             });
-            ServerEvents.command('test', function(event) {
+            ServerEvents.basicCommand('test', function(event) {
                 // Command handler
             });
             'success';
@@ -656,8 +656,9 @@ class ScriptEngineTest {
         val itemUseHandlers = com.rhett.rhettjs.events.ServerEventsAPI.getHandlers("itemUse")
         assertEquals(1, itemUseHandlers.size, "One itemUse handler should be registered")
 
-        val commandHandlers = com.rhett.rhettjs.events.ServerEventsAPI.getCommandHandlers("test")
-        assertEquals(1, commandHandlers.size, "One command handler should be registered")
+        val commandHandlers = com.rhett.rhettjs.events.ServerEventsAPI.getCommandHandlers()
+        assertEquals(1, commandHandlers.size, "One command should be registered")
+        assertTrue(commandHandlers.containsKey("test"), "Command 'test' should be registered")
 
         com.rhett.rhettjs.events.ServerEventsAPI.clear()
     }

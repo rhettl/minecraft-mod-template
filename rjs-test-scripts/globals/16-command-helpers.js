@@ -95,7 +95,8 @@ const Cmd = (function () {
 
       // Build parameter string
       const paramParts = [];
-      for (const [key, value] of Object.entries(params)) {
+      for (let key of Object.getOwnPropertyNames(params)) {
+        let value = params[key];
         // Handle different value types
         if (typeof value === "boolean") {
           // Boolean parameters (not common in selectors, but handle anyway)
@@ -244,125 +245,123 @@ const Cmd = (function () {
    * Execute Command Builder
    * Provides fluent API for building complex /execute commands
    */
-  class ExecuteBuilder {
-    constructor () {
-      this.parts = [];
-    }
+  function ExecuteBuilder () {
+    this.parts = [];
+  }
 
-    /**
-     * Add "as <selector>" clause
-     */
-    as (selector) {
-      this.parts.push(`as ${selector}`);
-      return this;
-    }
+  /**
+   * Add "as <selector>" clause
+   */
+  ExecuteBuilder.prototype.as = function (selector) {
+    this.parts.push(`as ${selector}`);
+    return this;
+  }
 
-    /**
-     * Add "at <selector>" clause
-     */
-    at (selector) {
-      this.parts.push(`at ${selector}`);
-      return this;
-    }
+  /**
+   * Add "at <selector>" clause
+   */
+  ExecuteBuilder.prototype.at = function (selector) {
+    this.parts.push(`at ${selector}`);
+    return this;
+  }
 
-    /**
-     * Add "positioned <coords>" clause
-     */
-    positioned (coords) {
-      const coordStr = Array.isArray(coords)
-                       ? coords.join(" ")
-                       : `${coords.x} ${coords.y} ${coords.z}`;
-      this.parts.push(`positioned ${coordStr}`);
-      return this;
-    }
+  /**
+   * Add "positioned <coords>" clause
+   */
+  ExecuteBuilder.prototype.positioned = function (coords) {
+    const coordStr = Array.isArray(coords)
+                     ? coords.join(" ")
+                     : `${coords.x} ${coords.y} ${coords.z}`;
+    this.parts.push(`positioned ${coordStr}`);
+    return this;
+  }
 
-    /**
-     * Add "if" condition clause
-     *
-     * @param {Object} condition - Condition object
-     * @param {Array|Object} condition.block - Block coords for "if block" check
-     * @param {string} condition.is - Block type to check
-     * @param {string} condition.entity - Entity selector for "if entity" check
-     * @param {Object} condition.score - Score condition {target, objective, matches}
-     */
-    if (condition) {
-      if (condition.block && condition.is) {
-        const coords = Array.isArray(condition.block)
-                       ? condition.block.join(" ")
-                       : `${condition.block.x} ${condition.block.y} ${condition.block.z}`;
-        this.parts.push(`if block ${coords} ${condition.is}`);
-      } else if (condition.entity) {
-        this.parts.push(`if entity ${condition.entity}`);
-      } else if (condition.score) {
-        const {target, objective, matches} = condition.score;
-        this.parts.push(`if score ${target} ${objective} matches ${matches}`);
-      } else {
-        throw new Error("execute.if: invalid condition");
-      }
-      return this;
+  /**
+   * Add "if" condition clause
+   *
+   * @param {Object} condition - Condition object
+   * @param {Array|Object} condition.block - Block coords for "if block" check
+   * @param {string} condition.is - Block type to check
+   * @param {string} condition.entity - Entity selector for "if entity" check
+   * @param {Object} condition.score - Score condition {target, objective, matches}
+   */
+  ExecuteBuilder.prototype.if = function (condition) {
+    if (condition.block && condition.is) {
+      const coords = Array.isArray(condition.block)
+                     ? condition.block.join(" ")
+                     : `${condition.block.x} ${condition.block.y} ${condition.block.z}`;
+      this.parts.push(`if block ${coords} ${condition.is}`);
+    } else if (condition.entity) {
+      this.parts.push(`if entity ${condition.entity}`);
+    } else if (condition.score) {
+      const {target, objective, matches} = condition.score;
+      this.parts.push(`if score ${target} ${objective} matches ${matches}`);
+    } else {
+      throw new Error("execute.if: invalid condition");
     }
+    return this;
+  }
 
-    /**
-     * Add "unless" condition clause (same format as if)
-     */
-    unless (condition) {
-      if (condition.block && condition.is) {
-        const coords = Array.isArray(condition.block)
-                       ? condition.block.join(" ")
-                       : `${condition.block.x} ${condition.block.y} ${condition.block.z}`;
-        this.parts.push(`unless block ${coords} ${condition.is}`);
-      } else if (condition.entity) {
-        this.parts.push(`unless entity ${condition.entity}`);
-      } else if (condition.score) {
-        const {target, objective, matches} = condition.score;
-        this.parts.push(`unless score ${target} ${objective} matches ${matches}`);
-      } else {
-        throw new Error("execute.unless: invalid condition");
-      }
-      return this;
+  /**
+   * Add "unless" condition clause (same format as if)
+   */
+  ExecuteBuilder.prototype.unless = function (condition) {
+    if (condition.block && condition.is) {
+      const coords = Array.isArray(condition.block)
+                     ? condition.block.join(" ")
+                     : `${condition.block.x} ${condition.block.y} ${condition.block.z}`;
+      this.parts.push(`unless block ${coords} ${condition.is}`);
+    } else if (condition.entity) {
+      this.parts.push(`unless entity ${condition.entity}`);
+    } else if (condition.score) {
+      const {target, objective, matches} = condition.score;
+      this.parts.push(`unless score ${target} ${objective} matches ${matches}`);
+    } else {
+      throw new Error("execute.unless: invalid condition");
     }
+    return this;
+  }
 
-    /**
-     * Add "in <dimension>" clause
-     */
-    in (dimension) {
-      this.parts.push(`in ${dimension}`);
-      return this;
-    }
+  /**
+   * Add "in <dimension>" clause
+   */
+  ExecuteBuilder.prototype.in = function dimension () {
+    this.parts.push(`in ${dimension}`);
+    return this;
+  }
 
-    /**
-     * Add "run <command>" clause (final clause)
-     */
-    run (command) {
-      this.parts.push(`run ${command}`);
-      return this;
-    }
+  /**
+   * Add "run <command>" clause (final clause)
+   */
+  ExecuteBuilder.prototype.run = function (command) {
+    this.parts.push(`run ${command}`);
+    return this;
+  }
 
-    /**
-     * Build the final execute command string
-     */
-    build () {
-      if (this.parts.length === 0) {
-        throw new Error("execute builder: no clauses added");
-      }
-      return `execute ${this.parts.join(" ")}`;
+  /**
+   * Build the final execute command string
+   */
+  ExecuteBuilder.prototype.build = function () {
+    if (this.parts.length === 0) {
+      throw new Error("execute builder: no clauses added");
     }
+    return `execute ${this.parts.join(" ")}`;
+  }
 
-    /**
-     * Build and execute the command immediately
-     * Returns a Promise
-     */
-    executeAsServer () {
-      return Command.executeAsServer(this.build());
-    }
+  /**
+   * Build and execute the command immediately
+   * Returns a Promise
+   */
+  ExecuteBuilder.prototype.executeAsServer = function () {
+    return Command.executeAsServer(this.build());
+  }
 
-    /**
-     * Build and execute as caller
-     * Returns a Promise
-     */
-    executeCaller () {
-      return Command.execute(this.build());
-    }
+  /**
+   * Build and execute as caller
+   * Returns a Promise
+   */
+  ExecuteBuilder.prototype.executeCaller = function () {
+    return Command.execute(this.build());
   }
 
   // Return CommandHelpers as the exported API

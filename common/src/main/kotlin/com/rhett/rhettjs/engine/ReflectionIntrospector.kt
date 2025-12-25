@@ -44,7 +44,9 @@ object ReflectionIntrospector {
                 // Skip methods from Object class
                 method.declaringClass != Object::class.java &&
                 // Skip getClass, wait, notify, etc.
-                method.name !in setOf("getClass", "wait", "notify", "notifyAll", "hashCode", "equals", "toString")
+                method.name !in setOf("getClass", "wait", "notify", "notifyAll", "hashCode", "equals", "toString") &&
+                // Skip Kotlin synthetic methods (default parameters, etc.)
+                !method.name.contains("$")
             }
             .forEach { method ->
                 methods.add(extractMethodSignature(method))

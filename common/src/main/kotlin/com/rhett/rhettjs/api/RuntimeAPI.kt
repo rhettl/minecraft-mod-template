@@ -92,6 +92,53 @@ object RuntimeAPI {
     fun getEventLoopTimeout(): Long = eventLoopTimeout
 
     /**
+     * Inspect a Java object using reflection to see available methods and fields.
+     * Useful for exploring Minecraft API objects from JavaScript.
+     *
+     * @param obj The Java object to inspect
+     * @return Map containing class info, methods, fields, and superclass chain
+     */
+    fun inspect(obj: Any?): Map<String, Any> {
+        if (obj == null) {
+            return mapOf("error" to "Cannot inspect null object")
+        }
+
+        val clazz = obj.javaClass
+
+        // Get all public methods (excluding Object methods for clarity)
+        val methods = clazz.methods
+            .filter { !it.declaringClass.name.startsWith("java.lang.Object") }
+            .map { method ->
+                val params = method.parameterTypes.joinToString(", ") { it.simpleName }
+                "${method.name}($params): ${method.returnType.simpleName}"
+            }
+            .distinct()
+            .sorted()
+
+        // Get all public fields
+        val fields = clazz.fields
+            .map { field -> "${field.name}: ${field.type.simpleName}" }
+            .sorted()
+
+        // Get superclass chain
+        val superclasses = mutableListOf<String>()
+        var currentClass: Class<*>? = clazz.superclass
+        while (currentClass != null && currentClass.name != "java.lang.Object") {
+            superclasses.add(currentClass.name)
+            currentClass = currentClass.superclass
+        }
+
+        return mapOf(
+            "class" to clazz.name,
+            "simpleName" to clazz.simpleName,
+            "methods" to methods,
+            "fields" to fields,
+            "superclasses" to superclasses,
+            "interfaces" to clazz.interfaces.map { it.name }.sorted()
+        )
+    }
+
+    /**
      * Create a JavaScript-friendly Runtime object with env as a property.
      */
     fun createJSObject(scope: Scriptable): Scriptable {
@@ -149,6 +196,33 @@ object RuntimeAPI {
             }
         }
         ScriptableObject.putProperty(runtime, "setEventLoopTimeout", setTimeoutFunc)
+
+        // Add inspect function for debugging Java objects
+        val inspectFunc = object : org.mozilla.javascript.BaseFunction() {
+            override fun call(
+                cx: Context,
+                scope: Scriptable,
+                thisObj: Scriptable?,
+                args: Array<Any?>
+            ): Any {
+                if (args.isEmpty()) {
+                    throw org.mozilla.javascript.ScriptRuntime.typeError("inspect() requires an object argument")
+                }
+
+                val obj = args[0]
+                val unwrapped = if (obj is org.mozilla.javascript.Wrapper) {
+                    obj.unwrap()
+                } else {
+                    obj
+                }
+
+                val result = inspect(unwrapped)
+
+                // Convert to JavaScript object
+                return Context.javaToJS(result, scope)
+            }
+        }
+        ScriptableObject.putProperty(runtime, "inspect", inspectFunc)
 
         return runtime
     }

@@ -195,6 +195,10 @@ object ScriptEngine {
         scope.put("Runtime", scope, runtimeObj)
         ConfigManager.debug("Injected threading APIs: task, wait")
 
+        // Ephemeral storage API - persists across script executions
+        scope.put("Store", scope, Context.javaToJS(com.rhett.rhettjs.api.StoreAPI, scope))
+        ConfigManager.debug("Injected Store API")
+
         // Inject Promise prototype extensions (thenTask, thenWait)
         PromiseExtensions.inject(scope)
         ConfigManager.debug("Injected Promise extensions: thenTask, thenWait")

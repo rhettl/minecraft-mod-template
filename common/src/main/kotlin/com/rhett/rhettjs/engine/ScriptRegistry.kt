@@ -18,6 +18,7 @@ import kotlin.io.path.readText
  */
 object ScriptRegistry {
     private val scripts = ConcurrentHashMap<String, ScriptInfo>()
+    private var scanned = false
 
     /**
      * Scan the base directory for scripts and validate them.
@@ -27,6 +28,7 @@ object ScriptRegistry {
     fun scan(baseDir: Path) {
         ConfigManager.debug("Starting script scan in: $baseDir")
         scripts.clear()
+        scanned = true
 
         ScriptCategory.values().forEach { category ->
             val dir = baseDir.resolve(category.dirName)
@@ -198,5 +200,13 @@ object ScriptRegistry {
      */
     fun clear() {
         scripts.clear()
+        scanned = false
     }
+
+    /**
+     * Check if the registry has been scanned.
+     *
+     * @return true if scan() has been called
+     */
+    fun hasScanned(): Boolean = scanned
 }

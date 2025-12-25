@@ -31,6 +31,13 @@ class RhettJS(modEventBus: IEventBus) {
         if (ConfigManager.isEnabled()) {
             ConfigManager.debug("RhettJS initialization starting")
 
+            // Load globals and startup scripts early (dimensions, registries)
+            ScriptSystemInitializer.initializeStartupScripts()
+
+            // Register block event handlers
+            NeoForge.EVENT_BUS.register(com.rhett.rhettjs.events.NeoForgeBlockEventHandler)
+            ConfigManager.debug("Registered block event handlers")
+
             // Register tick handler for schedule() processing
             NeoForge.EVENT_BUS.register(TickHandler)
             ConfigManager.debug("Registered tick handler for schedule() processing")
@@ -68,9 +75,8 @@ class RhettJS(modEventBus: IEventBus) {
             RJSCommand.register(event.dispatcher)
             ConfigManager.debug("Registered /rjs command")
 
-            // Register custom commands from startup scripts
-            com.rhett.rhettjs.commands.CustomCommandRegistry.registerCommands(event.dispatcher)
-            ConfigManager.debug("Registered custom commands")
+            // Store dispatcher for custom commands (registered after startup scripts)
+            com.rhett.rhettjs.commands.CustomCommandRegistry.storeDispatcher(event.dispatcher)
         }
     }
 
