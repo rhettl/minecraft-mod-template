@@ -7,14 +7,12 @@ import com.rhett.rhettjs.RhettJSCommon
 import com.rhett.rhettjs.api.CallerAPI
 import com.rhett.rhettjs.config.ConfigManager
 import com.rhett.rhettjs.engine.ScriptCategory
-import com.rhett.rhettjs.engine.ScriptEngine
+import com.rhett.rhettjs.engine.GraalEngine
 import com.rhett.rhettjs.engine.ScriptRegistry
 import com.rhett.rhettjs.engine.ScriptResult
 import com.rhett.rhettjs.engine.ScriptStatus
 import com.rhett.rhettjs.engine.ScriptSystemInitializer
 import com.rhett.rhettjs.engine.ServerScriptManager
-import com.rhett.rhettjs.engine.GlobalsLoader
-import com.rhett.rhettjs.engine.TypeGenerator
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.network.chat.Component
@@ -163,7 +161,7 @@ object RJSCommand {
         // Execute async to avoid blocking the game tick
         CompletableFuture.supplyAsync {
             try {
-                ScriptEngine.executeScript(script, mapOf(
+                GraalEngine.executeScript(script, mapOf(
                     "Caller" to callerAPI,
                     "Command" to commandWrapper,
                     "Args" to argsArray
@@ -221,24 +219,15 @@ object RJSCommand {
     /**
      * Handle /rjs globals command.
      * Lists all loaded global libraries.
+     * TODO: Implement globals loading in GraalVM
      */
     private fun globalsCommand(context: CommandContext<CommandSourceStack>): Int {
         val source = context.source
 
-        val globals = GlobalsLoader.getLoadedGlobals()
-
-        if (globals.isEmpty()) {
-            source.sendSuccess({ Component.literal("§7[RhettJS] No globals loaded") }, false)
-            source.sendSuccess({ Component.literal("§7Create .js files in rjs/globals/ to define global libraries") }, false)
-            return 1
-        }
-
+        // TODO: Implement globals loading for GraalVM
         source.sendSuccess({ Component.literal("§6=== RhettJS Globals ===") }, false)
-        source.sendSuccess({ Component.literal("§7Loaded ${globals.size} global(s):") }, false)
-
-        globals.forEach { globalName ->
-            source.sendSuccess({ Component.literal("  §a✓ §f$globalName") }, false)
-        }
+        source.sendSuccess({ Component.literal("§e[RhettJS] Globals loading not yet implemented in GraalVM migration") }, false)
+        source.sendSuccess({ Component.literal("§7Will be added in Phase 6") }, false)
 
         return 1
     }
@@ -246,55 +235,17 @@ object RJSCommand {
     /**
      * Handle /rjs probe command.
      * Introspects available RhettJS APIs and generates TypeScript definitions.
+     * TODO: Implement TypeScript generation for GraalVM
      */
     private fun probeCommand(context: CommandContext<CommandSourceStack>): Int {
         val source = context.source
 
         source.sendSuccess({ Component.literal("§6=== RhettJS API Probe ===") }, false)
-        source.sendSuccess({ Component.literal("§7Generating types from code...") }, false)
-        source.sendSuccess({ Component.literal("§7Probe will attempt to map your globals/ scripts,") }, false)
-        source.sendSuccess({ Component.literal("§7but some patterns are imperfect and probe may be inaccurate for those.") }, false)
-        source.sendSuccess({ Component.literal("") }, false)
+        source.sendSuccess({ Component.literal("§e[RhettJS] TypeScript generation not yet implemented in GraalVM migration") }, false)
+        source.sendSuccess({ Component.literal("§7TypeGenerator has been archived to dev-docs/removed-features/") }, false)
+        source.sendSuccess({ Component.literal("§7Will be reimplemented in a future phase") }, false)
 
-        try {
-            // Generate TypeScript definitions
-            val scriptsDir = source.server.serverDirectory.resolve("rjs")
-            val typesDir = scriptsDir.resolve("__types")
-
-            val result = TypeGenerator.generate(typesDir, scriptsDir)
-
-            when (result) {
-                is TypeGenerator.GenerationResult.Success -> {
-                    // Display summary
-                    source.sendSuccess({ Component.literal("") }, false)
-                    source.sendSuccess({ Component.literal("§a✓ Generated TypeScript definitions") }, false)
-                    source.sendSuccess({ Component.literal("  §7Location: §frjs/__types/") }, false)
-                    source.sendSuccess({ Component.literal("  §7Files:") }, false)
-                    source.sendSuccess({ Component.literal("    §f- rhettjs.d.ts §7(${result.coreApiCount} APIs)") }, false)
-                    if (result.globalsCount > 0) {
-                        source.sendSuccess({ Component.literal("    §f- rhettjs-globals.d.ts §7(${result.globalsCount} globals)") }, false)
-                    }
-                    source.sendSuccess({ Component.literal("    §f- README.md §7(setup instructions)") }, false)
-                    source.sendSuccess({ Component.literal("    §f- jsconfig.json.template §7(VSCode config)") }, false)
-
-                    source.sendSuccess({ Component.literal("") }, false)
-                    source.sendSuccess({ Component.literal("§7See §frjs/__types/README.md §7for IDE setup instructions") }, false)
-
-                    return 1
-                }
-
-                is TypeGenerator.GenerationResult.Error -> {
-                    source.sendFailure(Component.literal("§c[RhettJS] Failed to generate types: ${result.message}"))
-                    RhettJSCommon.LOGGER.error("[RhettJS] Type generation failed", result.exception)
-                    return 0
-                }
-            }
-
-        } catch (e: Exception) {
-            source.sendFailure(Component.literal("§c[RhettJS] Failed to generate types: ${e.message}"))
-            RhettJSCommon.LOGGER.error("[RhettJS] Type generation failed", e)
-            return 0
-        }
+        return 1
     }
 
 }
