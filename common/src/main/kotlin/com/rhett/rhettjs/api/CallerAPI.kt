@@ -1,6 +1,7 @@
 package com.rhett.rhettjs.api
 
 import com.rhett.rhettjs.threading.ThreadSafeAPI
+import com.rhett.rhettjs.util.JSConversion
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.network.chat.Component
 import net.minecraft.world.level.ClipContext
@@ -107,7 +108,7 @@ class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
      * Property access - use `Caller.name` instead of `Caller.getName()`.
      */
     fun getName(): String {
-        return source.displayName.string
+        return JSConversion.componentToJS(source.displayName)
     }
 
     /**
@@ -122,7 +123,7 @@ class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
             "x" to pos.x,
             "y" to pos.y,
             "z" to pos.z,
-            "dimension" to source.level.dimension().location().toString()
+            "dimension" to JSConversion.resourceLocationToJS(source.level.dimension().location())
         )
     }
 
@@ -181,7 +182,7 @@ class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
      */
     @Deprecated("Use Caller.position.dimension instead", ReplaceWith("position.dimension"))
     fun getDimension(): String {
-        return source.level.dimension().location().toString()
+        return JSConversion.resourceLocationToJS(source.level.dimension().location())
     }
 
     /**
@@ -245,7 +246,7 @@ class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
                     "x" to blockPos.x,
                     "y" to blockPos.y,
                     "z" to blockPos.z,
-                    "block" to blockState.block.descriptionId.replace("block.minecraft.", "minecraft:"),
+                    "block" to JSConversion.toJSString(blockState.block.descriptionId.replace("block.minecraft.", "minecraft:")),
                     "face" to blockHit.direction.name.lowercase(),
                     "distance" to distance
                 )

@@ -1,6 +1,7 @@
 package com.rhett.rhettjs.commands
 
 import com.mojang.brigadier.context.CommandContext
+import com.rhett.rhettjs.util.JSConversion
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.level.ServerPlayer
 import org.mozilla.javascript.Context
@@ -33,7 +34,12 @@ class CommandContextWrapper(
      * JavaScript: ctx.playerName
      */
     fun getPlayerName(): String {
-        return (context.source.entity as? ServerPlayer)?.name?.string ?: "Server"
+        val player = context.source.entity as? ServerPlayer
+        return if (player != null) {
+            JSConversion.componentToJS(player.name)
+        } else {
+            "Server"
+        }
     }
 
     /**
@@ -62,8 +68,17 @@ fun CommandContext<CommandSourceStack>.wrapForJavaScript(scope: Scriptable): Any
     // Add source
     ScriptableObject.putProperty(jsObj, "source", Context.javaToJS(this.source, scope))
 
+    // Add dimension helper (as JS string primitive)
+    val dimension = JSConversion.resourceLocationToJS(this.source.level.dimension().location())
+    ScriptableObject.putProperty(jsObj, "dimension", dimension)
+
     // Add helper for player name
-    ScriptableObject.putProperty(jsObj, "playerName", player?.name?.string ?: "Server")
+    val playerName = if (player != null) {
+        JSConversion.componentToJS(player.name)
+    } else {
+        "Server"
+    }
+    ScriptableObject.putProperty(jsObj, "playerName", playerName)
 
     // Add unwrap method to get the raw context (for argument type getters)
     val unwrapFunc = object : org.mozilla.javascript.BaseFunction() {

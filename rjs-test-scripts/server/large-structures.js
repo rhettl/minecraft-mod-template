@@ -51,8 +51,11 @@ ServerEvents.command('largeStructure', builder => {
         .executes(ctx => {
           let name = builder.arguments.STRING.get(ctx, 'name');
           let player = ctx.playerName;
-          console.debug(`fetching positions for ${player}`);
+          let world = ctx.dimension;
 
+          console.log('[DEBUG] world variable type:', typeof world, 'value:', world);
+
+          console.debug(`fetching positions for ${player}`);
           let pos = [
             posToArray(positions.get(`${player}:pos1`)),
             posToArray(positions.get(`${player}:pos2`)),
@@ -66,7 +69,7 @@ ServerEvents.command('largeStructure', builder => {
             .join(',')}), (${pos[1].join(',')})]`);
 
           console.log('[DEBUG] About to call task()...');
-          const promise = task(handleRead, name, pos[0], pos[1], {analyze: true});
+          const promise = task(handleRead, name, pos[0], pos[1], {world: world, analyze: true});
           console.log('[DEBUG] task() returned promise:', promise);
 
           const thenPromise = promise.then(res => {
@@ -152,7 +155,7 @@ function handleRead (name, pos1, pos2, options) {
 
   // Validate required args
   if (!name || isNaN(x1) || isNaN(y1) || isNaN(z1) || isNaN(x2) || isNaN(y2) || isNaN(z2)) {
-    return Promise.reject(new Error(`missing variables [name, pos1, pos2] [${name}, (${pos1}), (${pos2})]`));
+    throw new Error(`missing variables [name, pos1, pos2] [${name}, (${pos1}), (${pos2})]`);
   }
 
   // Parse optional flags
@@ -184,13 +187,13 @@ function handleRead (name, pos1, pos2, options) {
     // Stop timing
     const elapsed = perf.stop();
 
-    return Promise.resolve({
+    return {
       success: true,
       elapsed: elapsed,
       metadata: metadata
-    })
+    }
 
   } catch (error) {
-    return Promise.reject(error);
+    throw error;
   }
 }

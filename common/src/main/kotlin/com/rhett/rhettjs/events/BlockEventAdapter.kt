@@ -1,5 +1,6 @@
 package com.rhett.rhettjs.events
 
+import com.rhett.rhettjs.util.JSConversion
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.core.registries.BuiltInRegistries
@@ -20,7 +21,7 @@ object BlockEventAdapter {
      * Convert Minecraft BlockPos to our BlockPosition model.
      */
     fun toBlockPosition(pos: BlockPos, level: Level): BlockPosition {
-        val dimensionKey = level.dimension().location().toString()
+        val dimensionKey = JSConversion.resourceLocationToJS(level.dimension().location())
         return BlockPosition(
             x = pos.x,
             y = pos.y,
@@ -34,7 +35,7 @@ object BlockEventAdapter {
      */
     fun toPlayerData(player: Player): PlayerData {
         return PlayerData(
-            name = player.name.string,
+            name = JSConversion.componentToJS(player.name),
             uuid = player.stringUUID,
             isCreative = player.abilities.instabuild
         )
@@ -44,9 +45,9 @@ object BlockEventAdapter {
      * Convert Minecraft BlockState to our BlockData model.
      */
     fun toBlockData(state: BlockState): BlockData {
-        val blockId = BuiltInRegistries.BLOCK.getKey(state.block).toString()
+        val blockId = JSConversion.resourceLocationToJS(BuiltInRegistries.BLOCK.getKey(state.block))
         val properties = state.values.mapKeys { it.key.name }
-            .mapValues { it.value.toString() }
+            .mapValues { JSConversion.toJSString(it.value) }
 
         return BlockData(
             id = blockId,
@@ -60,9 +61,9 @@ object BlockEventAdapter {
     fun toItemData(stack: ItemStack): ItemData? {
         if (stack.isEmpty) return null
 
-        val itemId = BuiltInRegistries.ITEM.getKey(stack.item).toString()
+        val itemId = JSConversion.resourceLocationToJS(BuiltInRegistries.ITEM.getKey(stack.item))
         val displayName = try {
-            stack.hoverName.string
+            JSConversion.componentToJS(stack.hoverName)
         } catch (e: Exception) {
             null
         }

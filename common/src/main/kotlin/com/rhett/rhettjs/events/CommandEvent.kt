@@ -1,5 +1,6 @@
 package com.rhett.rhettjs.events
 
+import com.rhett.rhettjs.util.JSConversion
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.core.BlockPos
 import net.minecraft.network.chat.Component
@@ -64,7 +65,7 @@ class CommandEvent(
      * Get the command source's name (player name or "Server").
      */
     fun getSenderName(): String {
-        return source.displayName.string
+        return JSConversion.componentToJS(source.displayName)
     }
 
     /**

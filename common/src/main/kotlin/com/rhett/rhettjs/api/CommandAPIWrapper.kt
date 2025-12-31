@@ -1,5 +1,6 @@
 package com.rhett.rhettjs.api
 
+import com.rhett.rhettjs.util.JSConversion
 import net.minecraft.server.MinecraftServer
 import org.mozilla.javascript.BaseFunction
 import org.mozilla.javascript.Context
@@ -227,7 +228,7 @@ class CommandAPIWrapper(
                     jsArray
                 }
                 is String, is Number, is Boolean -> value
-                else -> value.toString()
+                else -> JSConversion.toJSString(value)
             }
         }
     }
