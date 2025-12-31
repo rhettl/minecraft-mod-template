@@ -75,8 +75,8 @@ class RhettJS(modEventBus: IEventBus) {
             RJSCommand.register(event.dispatcher)
             ConfigManager.debug("Registered /rjs command")
 
-            // Store dispatcher for custom commands (registered after startup scripts)
-            com.rhett.rhettjs.commands.CustomCommandRegistry.storeDispatcher(event.dispatcher)
+            // TODO: Store dispatcher for custom commands (GraalVM)
+            // com.rhett.rhettjs.commands.CustomCommandRegistry.storeDispatcher(event.dispatcher)
         }
     }
 

@@ -42,7 +42,8 @@ class RhettJSFabric : ModInitializer {
             ConfigManager.debug("Registered /rjs command")
 
             // Store dispatcher for custom commands (registered after startup scripts)
-            com.rhett.rhettjs.commands.CustomCommandRegistry.storeDispatcher(dispatcher)
+            // TODO: Store dispatcher for custom commands (GraalVM)
+            // com.rhett.rhettjs.commands.CustomCommandRegistry.storeDispatcher(dispatcher)
         }
 
         // Register tick handler for schedule() processing

@@ -4,8 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "refmap": "rhettjs-common-refmap.json",
   "mixins": [
-    "PackRepositoryMixin",
-    "WorldLoaderPackConfigMixin"
+    "PackRepositoryMixin"
   ],
   "injectors": {
     "defaultRequire": 1

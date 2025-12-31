@@ -2,8 +2,6 @@ package com.rhett.rhettjs.engine
 
 import com.rhett.rhettjs.RhettJSCommon
 import com.rhett.rhettjs.config.ConfigManager
-import org.mozilla.javascript.Context
-import org.mozilla.javascript.EvaluatorException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -114,26 +112,10 @@ object ScriptRegistry {
     private fun validateScript(file: Path): ScriptStatus {
         ConfigManager.debug("Validating syntax for: ${file.fileName}")
 
-        return try {
-            val cx = Context.enter()
-            try {
-                cx.optimizationLevel = -1
-                cx.languageVersion = Context.VERSION_ES6
-
-                // Just validate syntax - don't execute
-                // Note: This won't catch ReferenceErrors for Runtime.env at top level
-                // Those will be caught during actual execution
-                cx.compileString(file.readText(), file.fileName.toString(), 1, null)
-                ConfigManager.debug("Syntax validation passed for: ${file.fileName}")
-                ScriptStatus.LOADED
-            } finally {
-                Context.exit()
-            }
-        } catch (e: EvaluatorException) {
-            RhettJSCommon.LOGGER.error("[RhettJS] Syntax error in ${file.fileName}: ${e.message}")
-            ConfigManager.debug("Syntax validation failed for: ${file.fileName} - ${e.message}")
-            ScriptStatus.ERROR
-        }
+        // TODO: Implement syntax validation using GraalVM
+        // For now, just mark as loaded - GraalVM will validate during execution
+        ConfigManager.debug("Syntax validation skipped (TODO: implement for GraalVM)")
+        return ScriptStatus.LOADED
     }
 
     /**

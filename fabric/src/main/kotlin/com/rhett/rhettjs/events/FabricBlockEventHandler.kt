@@ -35,7 +35,8 @@ object FabricBlockEventHandler {
                 isRightClick = true
             )
 
-            val cancelled = BlockEventTrigger.trigger("blockRightClicked", eventData, player)
+            // TODO: Re-implement event trigger for GraalVM
+            val cancelled = false // BlockEventTrigger.trigger("blockRightClicked", eventData, player)
 
             if (cancelled) InteractionResult.FAIL else InteractionResult.PASS
         }
@@ -58,7 +59,8 @@ object FabricBlockEventHandler {
                 isRightClick = false
             )
 
-            val cancelled = BlockEventTrigger.trigger("blockLeftClicked", eventData, player)
+            // TODO: Re-implement event trigger for GraalVM
+            val cancelled = false // BlockEventTrigger.trigger("blockLeftClicked", eventData, player)
 
             if (cancelled) InteractionResult.FAIL else InteractionResult.PASS
         }

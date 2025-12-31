@@ -2,12 +2,11 @@ package com.rhett.rhettjs.engine
 
 import com.rhett.rhettjs.RhettJSCommon
 import com.rhett.rhettjs.api.StructureAPI
-import com.rhett.rhettjs.api.StructureAPIWrapper
 import com.rhett.rhettjs.api.WorldAPI
-import com.rhett.rhettjs.api.WorldAPIWrapper
 import com.rhett.rhettjs.config.ConfigManager
-import com.rhett.rhettjs.events.ServerEventsAPI
-import com.rhett.rhettjs.events.StartupEventsAPI
+// TODO: Re-implement event system for GraalVM
+// import com.rhett.rhettjs.events.ServerEventsAPI
+// import com.rhett.rhettjs.events.StartupEventsAPI
 import com.rhett.rhettjs.worldgen.DimensionRegistry
 import com.rhett.rhettjs.worldgen.DatapackGenerator
 import net.minecraft.server.MinecraftServer
@@ -40,7 +39,8 @@ object ScriptSystemInitializer {
         ScriptRegistry.scan(scriptsDir)
 
         // Load global libraries ONCE
-        GlobalsLoader.reload(scriptsDir)
+        // TODO: Implement globals loading for GraalVM
+        // GlobalsLoader.reload(scriptsDir)
         ConfigManager.debug("Loaded global libraries")
 
         // Execute startup scripts (direct registries like items/blocks)
@@ -67,7 +67,8 @@ object ScriptSystemInitializer {
         initializeWorldAPI(server)
 
         // Register custom commands (server scripts have loaded early and registered handlers)
-        com.rhett.rhettjs.commands.CustomCommandRegistry.registerCommands()
+        // TODO: Implement custom command registration for GraalVM
+        // com.rhett.rhettjs.commands.CustomCommandRegistry.registerCommands()
 
         RhettJSCommon.LOGGER.info("[RhettJS] Ready! Use /rjs list to see available scripts")
         ConfigManager.debug("Server resources initialization complete")
@@ -87,8 +88,10 @@ object ScriptSystemInitializer {
         RhettJSCommon.LOGGER.info("[RhettJS] Reloading scripts...")
 
         // Clear server event handlers and globals (NOT startup - those don't reload)
-        ServerEventsAPI.clear()
-        GlobalsLoader.clear()
+        // TODO: Clear server events for GraalVM
+        // ServerEventsAPI.clear()
+        // TODO: Clear globals for GraalVM
+        // GlobalsLoader.clear()
 
         // Rescan all scripts (including utility scripts for reindexing)
         RhettJSCommon.LOGGER.info("[RhettJS] Rescanning scripts...")
@@ -96,7 +99,8 @@ object ScriptSystemInitializer {
 
         // Reload globals
         RhettJSCommon.LOGGER.info("[RhettJS] Reloading globals...")
-        GlobalsLoader.reload(scriptsDir)
+        // TODO: Implement globals loading for GraalVM
+        // GlobalsLoader.reload(scriptsDir)
 
         // Note: Server scripts execution is handled by caller (RJSCommand or data pack reload)
         // Startup scripts are NOT reloaded (require full server restart)
@@ -150,11 +154,10 @@ object ScriptSystemInitializer {
         Files.createDirectories(structureBackupsDir)
 
         val structureApi = StructureAPI(structuresDir, structureBackupsDir)
-        val structureWrapper = StructureAPIWrapper(structureApi)
-
-        // Register Structure API globally so it's available in all script contexts
-        ScriptEngine.initializeStructureAPI(structureWrapper)
-        ConfigManager.debug("Initialized Structure API (temporary) with paths: structures=$structuresDir, backups=$structureBackupsDir")
+        // TODO: Inject Structure API through GraalEngine bindings
+        // val structureWrapper = StructureAPIWrapper(structureApi)
+        // ScriptEngine.initializeStructureAPI(structureWrapper)
+        ConfigManager.debug("Structure API created (not yet injected to GraalVM): structures=$structuresDir, backups=$structureBackupsDir")
     }
 
     /**
@@ -183,12 +186,11 @@ object ScriptSystemInitializer {
         Files.createDirectories(structureBackupsDir)
 
         val structureApi = StructureAPI(structuresDir, structureBackupsDir)
-        val structureWrapper = StructureAPIWrapper(structureApi)
-
-        // Replace globally registered Structure API
-        ScriptEngine.initializeStructureAPI(structureWrapper)
-        ConfigManager.debug("Re-initialized Structure API with world paths: structures=$structuresDir, backups=$structureBackupsDir")
-        RhettJSCommon.LOGGER.info("[RhettJS] Structure API using world directory: generated/minecraft/structures/")
+        // TODO: Inject Structure API through GraalEngine bindings
+        // val structureWrapper = StructureAPIWrapper(structureApi)
+        // ScriptEngine.initializeStructureAPI(structureWrapper)
+        ConfigManager.debug("Structure API re-created (not yet injected to GraalVM): structures=$structuresDir, backups=$structureBackupsDir")
+        RhettJSCommon.LOGGER.info("[RhettJS] Structure API ready for world directory: generated/minecraft/structures/")
     }
 
     /**
@@ -196,11 +198,10 @@ object ScriptSystemInitializer {
      */
     private fun initializeWorldAPI(server: MinecraftServer) {
         val worldApi = WorldAPI(server)
-        val worldWrapper = WorldAPIWrapper(worldApi)
-
-        // Register World API globally so it's available in all script contexts
-        ScriptEngine.initializeWorldAPI(worldWrapper)
-        ConfigManager.debug("Initialized World API")
+        // TODO: Inject World API through GraalEngine bindings
+        // val worldWrapper = WorldAPIWrapper(worldApi)
+        // ScriptEngine.initializeWorldAPI(worldWrapper)
+        ConfigManager.debug("World API created (not yet injected to GraalVM)")
     }
 
     /**
@@ -212,7 +213,7 @@ object ScriptSystemInitializer {
             RhettJSCommon.LOGGER.info("[RhettJS] Executing ${startupScripts.size} startup scripts...")
             startupScripts.forEach { script ->
                 try {
-                    ScriptEngine.executeScript(script)
+                    GraalEngine.executeScript(script)
                     ConfigManager.debug("Executed startup script: ${script.name}")
                 } catch (e: Exception) {
                     RhettJSCommon.LOGGER.error("[RhettJS] Failed to execute startup script: ${script.name}", e)

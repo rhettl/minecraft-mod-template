@@ -12,7 +12,8 @@ import com.rhett.rhettjs.engine.ScriptRegistry
 import com.rhett.rhettjs.engine.ScriptResult
 import com.rhett.rhettjs.engine.ScriptStatus
 import com.rhett.rhettjs.engine.ScriptSystemInitializer
-import com.rhett.rhettjs.engine.ServerScriptManager
+// TODO: Re-implement ServerScriptManager for GraalVM
+// import com.rhett.rhettjs.engine.ServerScriptManager
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.network.chat.Component
@@ -152,10 +153,8 @@ object RJSCommand {
         // Create Command API for command execution
         val player = source.player  // May be null if run from console
         val commandAPI = com.rhett.rhettjs.api.CommandAPI(source.server, player)
-        val commandWrapper = com.rhett.rhettjs.api.CommandAPIWrapper(commandAPI, source.server)
 
-        // Create Args array wrapper for JavaScript
-        // ScriptEngine will convert this to a proper JavaScript array with JS strings
+        // Create Args array - GraalVM will auto-convert to JS array
         val argsArray = args.toTypedArray()
 
         // Execute async to avoid blocking the game tick
@@ -163,7 +162,7 @@ object RJSCommand {
             try {
                 GraalEngine.executeScript(script, mapOf(
                     "Caller" to callerAPI,
-                    "Command" to commandWrapper,
+                    "Command" to commandAPI,  // GraalVM auto-wraps
                     "Args" to argsArray
                 ))
             } catch (e: Exception) {
@@ -202,9 +201,9 @@ object RJSCommand {
             // Clear and rescan scripts, reload globals
             ScriptSystemInitializer.reload(source.server.serverDirectory)
 
-            // Execute server scripts (commands, events, etc.)
-            val scriptsDir = ScriptSystemInitializer.getScriptsDirectory(source.server.serverDirectory)
-            ServerScriptManager.createAndLoad(scriptsDir)
+            // TODO: Re-execute server scripts for GraalVM
+            // val scriptsDir = ScriptSystemInitializer.getScriptsDirectory(source.server.serverDirectory)
+            // ServerScriptManager.createAndLoad(scriptsDir)
 
             source.sendSuccess({ Component.literal("§a[RhettJS] Reload complete") }, true)
             return 1

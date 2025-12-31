@@ -19,8 +19,8 @@ object TickScheduler {
      * - NeoForge: TickEvent.ServerTickEvent (Phase.END)
      */
     fun tick() {
-        // Tick the current event loop (if any script is executing)
-        EventLoop.getCurrent()?.tick()
+        // TODO: Implement GraalVM async scheduler tick
+        // EventLoop.getCurrent()?.tick()
     }
 
     /**
@@ -28,7 +28,8 @@ object TickScheduler {
      * Called by Runtime.exit() to stop script execution.
      */
     fun cancelAll() {
-        EventLoop.getCurrent()?.shutdown()
+        // TODO: Implement GraalVM async scheduler shutdown
+        // EventLoop.getCurrent()?.shutdown()
     }
 
     /**
@@ -36,6 +37,7 @@ object TickScheduler {
      * Called on script reload.
      */
     fun reset() {
-        EventLoop.getCurrent()?.reset()
+        // TODO: Implement GraalVM async scheduler reset
+        // EventLoop.getCurrent()?.reset()
     }
 }

@@ -28,7 +28,8 @@ object NeoForgeBlockEventHandler {
             isRightClick = true
         )
 
-        val cancelled = BlockEventTrigger.trigger("blockRightClicked", eventData, player)
+        // TODO: Re-implement event trigger for GraalVM
+        val cancelled = false // BlockEventTrigger.trigger("blockRightClicked", eventData, player)
         if (cancelled) {
             event.isCanceled = true
         }
@@ -53,7 +54,8 @@ object NeoForgeBlockEventHandler {
             isRightClick = false
         )
 
-        val cancelled = BlockEventTrigger.trigger("blockLeftClicked", eventData, player)
+        // TODO: Re-implement event trigger for GraalVM
+        val cancelled = false // BlockEventTrigger.trigger("blockLeftClicked", eventData, player)
         if (cancelled) {
             event.isCanceled = true
         }

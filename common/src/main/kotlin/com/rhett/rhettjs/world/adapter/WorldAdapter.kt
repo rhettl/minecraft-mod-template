@@ -1,6 +1,5 @@
 package com.rhett.rhettjs.world.adapter
 
-import com.rhett.rhettjs.util.JSConversion
 import com.rhett.rhettjs.world.models.*
 import net.minecraft.core.BlockPos
 import net.minecraft.server.MinecraftServer
@@ -351,7 +350,7 @@ class WorldAdapter(private val server: MinecraftServer) {
         // Get block registry name (e.g., "minecraft:stone", "terralith:volcanic_rock")
         val blockRegistryName = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(blockState.block)
         val blockName = if (blockRegistryName != null) {
-            JSConversion.resourceLocationToJS(blockRegistryName)
+            blockRegistryName.toString()
         } else {
             "minecraft:air"
         }
@@ -362,7 +361,7 @@ class WorldAdapter(private val server: MinecraftServer) {
         // Extract all properties from the block state
         // blockState.values returns Map<Property<?>, Comparable<?>>
         blockState.values.forEach { (property, value) ->
-            properties[property.name] = JSConversion.toJSString(value)
+            properties[property.name] = value.toString()
         }
 
         return BlockData(
