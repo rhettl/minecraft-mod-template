@@ -1,7 +1,6 @@
 package com.rhett.rhettjs.api
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException
-import com.rhett.rhettjs.util.JSConversion
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.network.chat.Component
 import net.minecraft.server.MinecraftServer
@@ -141,7 +140,7 @@ class CommandAPI(
         try {
             // Create a custom consumer to capture feedback
             val feedbackConsumer = Consumer<Component> { component ->
-                feedback.add(JSConversion.componentToJS(component))
+                feedback.add(component.string)
             }
 
             // Create a command source that captures feedback and success/result count

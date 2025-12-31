@@ -1,7 +1,5 @@
 package com.rhett.rhettjs.api
 
-import com.rhett.rhettjs.threading.ThreadSafeAPI
-import com.rhett.rhettjs.util.JSConversion
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.network.chat.Component
 import net.minecraft.world.level.ClipContext
@@ -16,9 +14,9 @@ import net.minecraft.world.phys.Vec3
  * The caller can be a player, console, command block, or any entity.
  * Provides chat/console message functionality and caller context (position, dimension, etc).
  *
- * Thread-safe: Can be called from worker threads (schedules message to main thread).
+ * Thread-safe: Can be called from async operations (schedules message to main thread).
  */
-class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
+class CallerAPI(private val source: CommandSourceStack) {
 
     /**
      * Send a message to the caller.
@@ -108,7 +106,7 @@ class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
      * Property access - use `Caller.name` instead of `Caller.getName()`.
      */
     fun getName(): String {
-        return JSConversion.componentToJS(source.displayName)
+        return source.displayName.string
     }
 
     /**
@@ -123,7 +121,7 @@ class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
             "x" to pos.x,
             "y" to pos.y,
             "z" to pos.z,
-            "dimension" to JSConversion.resourceLocationToJS(source.level.dimension().location())
+            "dimension" to source.level.dimension().location().toString()
         )
     }
 
@@ -182,7 +180,7 @@ class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
      */
     @Deprecated("Use Caller.position.dimension instead", ReplaceWith("position.dimension"))
     fun getDimension(): String {
-        return JSConversion.resourceLocationToJS(source.level.dimension().location())
+        return source.level.dimension().location().toString()
     }
 
     /**
@@ -246,7 +244,7 @@ class CallerAPI(private val source: CommandSourceStack) : ThreadSafeAPI {
                     "x" to blockPos.x,
                     "y" to blockPos.y,
                     "z" to blockPos.z,
-                    "block" to JSConversion.toJSString(blockState.block.descriptionId.replace("block.minecraft.", "minecraft:")),
+                    "block" to blockState.block.descriptionId.replace("block.minecraft.", "minecraft:"),
                     "face" to blockHit.direction.name.lowercase(),
                     "distance" to distance
                 )
