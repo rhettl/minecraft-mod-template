@@ -226,7 +226,7 @@ object GraalEngine {
             ConfigManager.debug("Injected binding: $name")
         }
 
-        val baseBindings = 7 // console, Runtime, wait, World, Structure, Store, NBT
+        val baseBindings = 9 // console, Runtime, wait, World, Structure, Store, NBT, Server, Commands
         val scriptBindings = if (category == ScriptCategory.UTILITY) 1 else 0  // Script.*
         ConfigManager.debug("Injected ${baseBindings + scriptBindings + additionalBindings.size} bindings for category: $category")
     }
@@ -1053,6 +1053,194 @@ object GraalEngine {
     }
 
     /**
+     * Create Server API proxy for JavaScript.
+     * Provides event system (on/off/once), server properties, and broadcast methods.
+     */
+    private fun createServerAPIProxy(): ProxyObject {
+        // Event handler storage (in-memory for now)
+        val eventHandlers = mutableMapOf<String, MutableList<Value>>()
+        val oneTimeHandlers = mutableMapOf<String, MutableList<Value>>()
+
+        return ProxyObject.fromMap(mapOf(
+            // Event registration
+            "on" to ProxyExecutable { args ->
+                if (args.size < 2) {
+                    throw IllegalArgumentException("on() requires event name and handler function")
+                }
+                val event = args[0].asString()
+                val handler = args[1]
+
+                if (!handler.canExecute()) {
+                    throw IllegalArgumentException("Second argument to on() must be a function")
+                }
+
+                eventHandlers.getOrPut(event) { mutableListOf() }.add(handler)
+                ConfigManager.debug("Registered handler for event: $event")
+                null
+            },
+
+            "off" to ProxyExecutable { args ->
+                if (args.size < 2) {
+                    throw IllegalArgumentException("off() requires event name and handler function")
+                }
+                val event = args[0].asString()
+                val handler = args[1]
+
+                eventHandlers[event]?.remove(handler)
+                oneTimeHandlers[event]?.remove(handler)
+                ConfigManager.debug("Unregistered handler for event: $event")
+                null
+            },
+
+            "once" to ProxyExecutable { args ->
+                if (args.size < 2) {
+                    throw IllegalArgumentException("once() requires event name and handler function")
+                }
+                val event = args[0].asString()
+                val handler = args[1]
+
+                if (!handler.canExecute()) {
+                    throw IllegalArgumentException("Second argument to once() must be a function")
+                }
+
+                oneTimeHandlers.getOrPut(event) { mutableListOf() }.add(handler)
+                ConfigManager.debug("Registered one-time handler for event: $event")
+                null
+            },
+
+            // Server properties (placeholder values)
+            "tps" to 20.0,
+            "players" to emptyList<Any>(),
+            "maxPlayers" to 20,
+            "motd" to "A Minecraft Server",
+
+            // Server methods
+            "broadcast" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    throw IllegalArgumentException("broadcast() requires a message")
+                }
+                val message = args[0].asString()
+                // TODO: Implement actual broadcast
+                ConfigManager.debug("Broadcast: $message")
+                null
+            },
+
+            "runCommand" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    throw IllegalArgumentException("runCommand() requires a command string")
+                }
+                val command = args[0].asString()
+                // TODO: Implement actual command execution
+                ConfigManager.debug("Run command: $command")
+                null
+            }
+        ))
+    }
+
+    /**
+     * Create Commands API proxy for JavaScript.
+     * Provides fluent builder API for command registration with Brigadier integration.
+     */
+    private fun createCommandsAPIProxy(): ProxyObject {
+        // Command registry (in-memory for now)
+        val registeredCommands = mutableMapOf<String, MutableMap<String, Any?>>()
+
+        /**
+         * Create a command builder that chains methods.
+         */
+        fun createCommandBuilder(name: String): ProxyObject {
+            val commandData = mutableMapOf<String, Any?>(
+                "name" to name,
+                "description" to null,
+                "permission" to null,
+                "arguments" to mutableListOf<Map<String, String>>(),
+                "executor" to null
+            )
+
+            registeredCommands[name] = commandData
+
+            return ProxyObject.fromMap(mapOf(
+                "description" to ProxyExecutable { args ->
+                    if (args.isEmpty()) {
+                        throw IllegalArgumentException("description() requires a description string")
+                    }
+                    commandData["description"] = args[0].asString()
+                    // Return self for chaining
+                    createCommandBuilder(name)
+                },
+
+                "permission" to ProxyExecutable { args ->
+                    if (args.isEmpty()) {
+                        throw IllegalArgumentException("permission() requires a permission string or function")
+                    }
+                    // Store the permission (string or function)
+                    commandData["permission"] = args[0]
+                    // Return self for chaining
+                    createCommandBuilder(name)
+                },
+
+                "argument" to ProxyExecutable { args ->
+                    if (args.size < 2) {
+                        throw IllegalArgumentException("argument() requires name and type")
+                    }
+                    val argName = args[0].asString()
+                    val argType = args[1].asString()
+
+                    // Validate argument type
+                    val validTypes = listOf("string", "int", "float", "player", "item", "block", "entity")
+                    if (argType !in validTypes) {
+                        throw IllegalArgumentException("Invalid argument type: $argType. Valid types: ${validTypes.joinToString(", ")}")
+                    }
+
+                    @Suppress("UNCHECKED_CAST")
+                    val arguments = commandData["arguments"] as MutableList<Map<String, String>>
+                    arguments.add(mapOf("name" to argName, "type" to argType))
+
+                    // Return self for chaining
+                    createCommandBuilder(name)
+                },
+
+                "executes" to ProxyExecutable { args ->
+                    if (args.isEmpty()) {
+                        throw IllegalArgumentException("executes() requires a handler function")
+                    }
+                    val handler = args[0]
+
+                    if (!handler.canExecute()) {
+                        throw IllegalArgumentException("executes() argument must be a function")
+                    }
+
+                    commandData["executor"] = handler
+                    ConfigManager.debug("Registered command: $name with ${(commandData["arguments"] as List<*>).size} arguments")
+
+                    // Return self for chaining (though typically executes() is the last call)
+                    createCommandBuilder(name)
+                }
+            ))
+        }
+
+        return ProxyObject.fromMap(mapOf(
+            "register" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    throw IllegalArgumentException("register() requires a command name")
+                }
+                val name = args[0].asString()
+                createCommandBuilder(name)
+            },
+
+            "unregister" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    throw IllegalArgumentException("unregister() requires a command name")
+                }
+                val name = args[0].asString()
+                registeredCommands.remove(name)
+                ConfigManager.debug("Unregistered command: $name")
+                null
+            }
+        ))
+    }
+
+    /**
      * Inject built-in API modules that can be imported.
      * These modules are available via: import World from 'World'
      * Each API is stored directly on globalThis as __builtin_<Name> for virtual module access.
@@ -1063,12 +1251,16 @@ object GraalEngine {
         val structureAPI = createStructureAPIProxy()
         val nbtAPI = createNBTAPIProxy()
         val storeAPI = createStoreAPIProxy()
+        val serverAPI = createServerAPIProxy()
+        val commandsAPI = createCommandsAPIProxy()
 
         // Put each API directly on globalThis for virtual module access
         bindings.putMember("__builtin_World", worldAPI)
         bindings.putMember("__builtin_Structure", structureAPI)
         bindings.putMember("__builtin_Store", storeAPI)
         bindings.putMember("__builtin_NBT", nbtAPI)
+        bindings.putMember("__builtin_Server", serverAPI)
+        bindings.putMember("__builtin_Commands", commandsAPI)
 
         ConfigManager.debug("Injected built-in modules (all APIs ready with placeholder implementations)")
     }

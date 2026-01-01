@@ -35,7 +35,7 @@ class RhettJSFileSystem(
 ) : FileSystem {
 
     companion object {
-        private val BUILT_IN_MODULES = setOf("World", "Structure", "Store", "NBT")
+        private val BUILT_IN_MODULES = setOf("World", "Structure", "Store", "NBT", "Server", "Commands")
         private const val VIRTUAL_PREFIX = "/__builtins__/"
     }
 
