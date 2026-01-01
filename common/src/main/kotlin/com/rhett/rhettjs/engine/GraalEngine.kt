@@ -38,6 +38,18 @@ object GraalEngine {
     @Volatile
     private var sharedContext: Context? = null
 
+    // Pre-compiled JavaScript helper functions (cached to avoid classloader issues)
+    @Volatile
+    private var jsNBTSetHelper: Value? = null
+    @Volatile
+    private var jsNBTDeleteHelper: Value? = null
+    @Volatile
+    private var jsNBTMergeShallowHelper: Value? = null
+    @Volatile
+    private var jsNBTMergeDeepHelper: Value? = null
+    @Volatile
+    private var jsUndefinedValue: Value? = null
+
     /**
      * Set the scripts base directory (called during initialization).
      * Required for ES6 module resolution.
@@ -54,6 +66,11 @@ object GraalEngine {
     fun reset() {
         sharedContext?.close()
         sharedContext = null
+        jsNBTSetHelper = null
+        jsNBTDeleteHelper = null
+        jsNBTMergeShallowHelper = null
+        jsNBTMergeDeepHelper = null
+        jsUndefinedValue = null
         ConfigManager.debug("GraalVM engine reset")
     }
 
@@ -103,11 +120,124 @@ object GraalEngine {
      */
     private fun getOrCreateContext(): Context {
         return sharedContext ?: synchronized(this) {
-            sharedContext ?: createContext().also {
-                sharedContext = it
-                ConfigManager.debug("Created shared GraalVM context")
+            sharedContext ?: createContext().also { ctx ->
+                sharedContext = ctx
+                initializeJSHelpers(ctx)
+                ConfigManager.debug("Created shared GraalVM context with pre-compiled helpers")
             }
         }
+    }
+
+    /**
+     * Initialize pre-compiled JavaScript helper functions.
+     * This avoids classloader issues when calling context.eval() from within running scripts.
+     */
+    private fun initializeJSHelpers(context: Context) {
+        // NBT.set() helper
+        jsNBTSetHelper = context.eval("js", """
+            (function(obj, path, value) {
+                const keys = path.split('.').flatMap(k => {
+                    const match = k.match(/^(.+?)\[(\d+)\]$/);
+                    return match ? [match[1], parseInt(match[2])] : [k];
+                });
+
+                function deepClone(val) {
+                    if (Array.isArray(val)) return [...val];
+                    if (typeof val === 'object' && val !== null) return {...val};
+                    return val;
+                }
+
+                function setPath(obj, keys, value) {
+                    if (keys.length === 0) return value;
+
+                    const [key, ...rest] = keys;
+                    const cloned = deepClone(obj);
+
+                    if (Array.isArray(cloned)) {
+                        cloned[key] = setPath(cloned[key], rest, value);
+                    } else {
+                        cloned[key] = setPath(cloned[key], rest, value);
+                    }
+
+                    return cloned;
+                }
+
+                return setPath(obj, keys, value);
+            })
+        """.trimIndent())
+
+        // NBT.delete() helper
+        jsNBTDeleteHelper = context.eval("js", """
+            (function(obj, path) {
+                const keys = path.split('.').flatMap(k => {
+                    const match = k.match(/^(.+?)\[(\d+)\]$/);
+                    return match ? [match[1], parseInt(match[2])] : [k];
+                });
+
+                function deepClone(val) {
+                    if (Array.isArray(val)) return [...val];
+                    if (typeof val === 'object' && val !== null) return {...val};
+                    return val;
+                }
+
+                function deletePath(obj, keys) {
+                    if (keys.length === 0) return obj;
+                    if (keys.length === 1) {
+                        const cloned = deepClone(obj);
+                        if (Array.isArray(cloned)) {
+                            cloned.splice(keys[0], 1);
+                        } else {
+                            delete cloned[keys[0]];
+                        }
+                        return cloned;
+                    }
+
+                    const [key, ...rest] = keys;
+                    const cloned = deepClone(obj);
+                    cloned[key] = deletePath(cloned[key], rest);
+                    return cloned;
+                }
+
+                return deletePath(obj, keys);
+            })
+        """.trimIndent())
+
+        // NBT.merge() shallow helper
+        jsNBTMergeShallowHelper = context.eval("js", """
+            (function(base, updates) {
+                return {...base, ...updates};
+            })
+        """.trimIndent())
+
+        // NBT.merge() deep helper
+        jsNBTMergeDeepHelper = context.eval("js", """
+            (function(base, updates) {
+                function deepMerge(target, source) {
+                    const result = Array.isArray(target) ? [...target] : {...target};
+
+                    for (const key in source) {
+                        if (source.hasOwnProperty(key)) {
+                            if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+                                result[key] = result[key] && typeof result[key] === 'object'
+                                    ? deepMerge(result[key], source[key])
+                                    : {...source[key]};
+                            } else {
+                                result[key] = source[key];
+                            }
+                        }
+                    }
+
+                    return result;
+                }
+
+                return deepMerge(base, updates);
+            })
+        """.trimIndent())
+
+        // JavaScript undefined value
+        jsUndefinedValue = context.eval("js", "undefined")
+
+        ConfigManager.debug("Initialized ${4} JavaScript helper functions")
     }
 
     /**
@@ -525,43 +655,9 @@ object GraalEngine {
      * Works with GraalVM Values directly to preserve JS object types.
      */
     private fun setNBTValueJS(nbtValue: Value, path: String, newValue: Value): Any {
-        val context = getOrCreateContext()
-
-        // Use JavaScript to perform immutable update
-        val jsCode = """
-            (function(obj, path, value) {
-                const keys = path.split('.').flatMap(k => {
-                    const match = k.match(/^(.+?)\[(\d+)\]$/);
-                    return match ? [match[1], parseInt(match[2])] : [k];
-                });
-
-                function deepClone(val) {
-                    if (Array.isArray(val)) return [...val];
-                    if (typeof val === 'object' && val !== null) return {...val};
-                    return val;
-                }
-
-                function setPath(obj, keys, value) {
-                    if (keys.length === 0) return value;
-
-                    const [key, ...rest] = keys;
-                    const cloned = deepClone(obj);
-
-                    if (Array.isArray(cloned)) {
-                        cloned[key] = setPath(cloned[key], rest, value);
-                    } else {
-                        cloned[key] = setPath(cloned[key], rest, value);
-                    }
-
-                    return cloned;
-                }
-
-                return setPath(obj, keys, value);
-            })
-        """.trimIndent()
-
-        val fn = context.eval("js", jsCode)
-        return fn.execute(nbtValue, path, newValue)
+        // Use pre-compiled helper to avoid classloader issues
+        val helper = jsNBTSetHelper ?: throw IllegalStateException("NBT helper not initialized")
+        return helper.execute(nbtValue, path, newValue)
     }
 
     /**
@@ -569,46 +665,9 @@ object GraalEngine {
      * Works with GraalVM Values directly to preserve JS object types.
      */
     private fun deleteNBTValueJS(nbtValue: Value, path: String): Any {
-        val context = getOrCreateContext()
-
-        // Use JavaScript to perform immutable delete
-        val jsCode = """
-            (function(obj, path) {
-                const keys = path.split('.').flatMap(k => {
-                    const match = k.match(/^(.+?)\[(\d+)\]$/);
-                    return match ? [match[1], parseInt(match[2])] : [k];
-                });
-
-                function deepClone(val) {
-                    if (Array.isArray(val)) return [...val];
-                    if (typeof val === 'object' && val !== null) return {...val};
-                    return val;
-                }
-
-                function deletePath(obj, keys) {
-                    if (keys.length === 0) return obj;
-                    if (keys.length === 1) {
-                        const cloned = deepClone(obj);
-                        if (Array.isArray(cloned)) {
-                            cloned.splice(keys[0], 1);
-                        } else {
-                            delete cloned[keys[0]];
-                        }
-                        return cloned;
-                    }
-
-                    const [key, ...rest] = keys;
-                    const cloned = deepClone(obj);
-                    cloned[key] = deletePath(cloned[key], rest);
-                    return cloned;
-                }
-
-                return deletePath(obj, keys);
-            })
-        """.trimIndent()
-
-        val fn = context.eval("js", jsCode)
-        return fn.execute(nbtValue, path)
+        // Use pre-compiled helper to avoid classloader issues
+        val helper = jsNBTDeleteHelper ?: throw IllegalStateException("NBT helper not initialized")
+        return helper.execute(nbtValue, path)
     }
 
     /**
@@ -620,43 +679,13 @@ object GraalEngine {
      * @param deep If true, performs deep merge; if false, shallow merge (default)
      */
     private fun mergeNBTValueJS(baseValue: Value, updatesValue: Value, deep: Boolean): Any {
-        val context = getOrCreateContext()
-
-        // Use JavaScript to perform merge
-        val jsCode = if (deep) {
-            """
-            (function(base, updates) {
-                function deepMerge(target, source) {
-                    const result = Array.isArray(target) ? [...target] : {...target};
-
-                    for (const key in source) {
-                        if (source.hasOwnProperty(key)) {
-                            if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-                                result[key] = result[key] && typeof result[key] === 'object'
-                                    ? deepMerge(result[key], source[key])
-                                    : {...source[key]};
-                            } else {
-                                result[key] = source[key];
-                            }
-                        }
-                    }
-
-                    return result;
-                }
-
-                return deepMerge(base, updates);
-            })
-            """.trimIndent()
+        // Use pre-compiled helper to avoid classloader issues
+        val helper = if (deep) {
+            jsNBTMergeDeepHelper ?: throw IllegalStateException("NBT helper not initialized")
         } else {
-            """
-            (function(base, updates) {
-                return {...base, ...updates};
-            })
-            """.trimIndent()
+            jsNBTMergeShallowHelper ?: throw IllegalStateException("NBT helper not initialized")
         }
-
-        val fn = context.eval("js", jsCode)
-        return fn.execute(baseValue, updatesValue)
+        return helper.execute(baseValue, updatesValue)
     }
 
     /**
@@ -1329,9 +1358,8 @@ object GraalEngine {
 
         ConfigManager.debug("Parsed argv: ${positionalArgs.size} positional args, ${flags.size} flags")
 
-        // Get the GraalVM context to access undefined value
-        val context = getOrCreateContext()
-        val undefined = context.eval("js", "undefined")
+        // Use pre-compiled undefined value to avoid classloader issues
+        val undefined = jsUndefinedValue ?: throw IllegalStateException("JavaScript helpers not initialized")
 
         return ProxyObject.fromMap(mapOf(
             // get(index) - Get positional argument by index
