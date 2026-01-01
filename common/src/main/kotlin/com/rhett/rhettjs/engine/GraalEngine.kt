@@ -26,19 +26,42 @@ object GraalEngine {
     @Volatile
     private var scriptTimeoutMs: Long = 30000L // Default: 30 seconds
 
+    // Scripts base directory for module resolution
+    @Volatile
+    private var scriptsBaseDir: java.nio.file.Path? = null
+
     /**
-     * Create a new GraalVM context with standard options.
+     * Set the scripts base directory (called during initialization).
+     * Required for ES6 module resolution.
+     */
+    fun setScriptsDirectory(baseDir: java.nio.file.Path) {
+        scriptsBaseDir = baseDir
+        ConfigManager.debug("Set scripts base directory for module resolution: $baseDir")
+    }
+
+    /**
+     * Create a new GraalVM context with ES2022 support and module resolution.
      *
      * @return A configured GraalVM Context
      */
     private fun createContext(): Context {
-        return Context.newBuilder("js")
+        val builder = Context.newBuilder("js")
             // Sandboxed - scripts only access explicitly injected APIs via bindings
             .allowExperimentalOptions(true)
             .option("js.esm-eval-returns-exports", "true")
             .option("js.ecmascript-version", "2022")  // ES2022 for modern features
             .option("js.top-level-await", "true")  // Enable top-level await
-            .build()
+
+        // Enable file system access for ES6 imports
+        // Set currentWorkingDirectory to modules/ so all imports resolve from there
+        if (scriptsBaseDir != null) {
+            val modulesDir = scriptsBaseDir!!.resolve("modules")
+            builder.allowIO(true)
+            builder.currentWorkingDirectory(modulesDir)
+            ConfigManager.debug("Set import resolution base: $modulesDir")
+        }
+
+        return builder.build()
     }
 
     /**
@@ -59,10 +82,19 @@ object GraalEngine {
             // Inject bindings based on script category
             injectBindings(context, script.category, additionalBindings)
 
-            // Create source from file
-            val source = Source.newBuilder("js", script.path.toFile())
-                .name(script.name)
-                .build()
+            // Create source from file with virtual URI in modules/ for import resolution
+            // This makes GraalVM think the script is IN modules/, so imports resolve from there
+            val source = if (scriptsBaseDir != null) {
+                val virtualUri = scriptsBaseDir!!.resolve("modules/${script.name}.js").toUri()
+                Source.newBuilder("js", script.path.toFile())
+                    .name(script.name)
+                    .uri(virtualUri)  // Virtual path for import resolution
+                    .build()
+            } else {
+                Source.newBuilder("js", script.path.toFile())
+                    .name(script.name)
+                    .build()
+            }
 
             ConfigManager.debug("Evaluating script: ${script.name}")
 
@@ -123,17 +155,27 @@ object GraalEngine {
         bindings.putMember("wait", waitFn)
         ConfigManager.debug("Injected wait() function")
 
-        // TODO: Phase 5 - Inject Store API
-        // TODO: Phase 6 - Inject Structure API
-        // TODO: Phase 7 - Inject World API
+        // Inject built-in modules for import (World, Structure, Store, NBT)
+        injectBuiltinModules(bindings)
 
-        // Inject additional bindings (Caller, Args, etc.)
+        // Inject Script.* for utility scripts
+        if (category == ScriptCategory.UTILITY) {
+            injectScriptContext(bindings, additionalBindings)
+        }
+
+        // Inject additional bindings (platform-specific)
         additionalBindings.forEach { (name, value) ->
+            // Skip Caller/Args if they were already injected as Script.*
+            if (category == ScriptCategory.UTILITY && (name == "Caller" || name == "Args")) {
+                return@forEach
+            }
             bindings.putMember(name, value)
             ConfigManager.debug("Injected binding: $name")
         }
 
-        ConfigManager.debug("Injected ${3 + additionalBindings.size} bindings for category: $category")
+        val baseBindings = 7 // console, Runtime, wait, World, Structure, Store, NBT
+        val scriptBindings = if (category == ScriptCategory.UTILITY) 1 else 0  // Script.*
+        ConfigManager.debug("Injected ${baseBindings + scriptBindings + additionalBindings.size} bindings for category: $category")
     }
 
     /**
@@ -261,6 +303,62 @@ object GraalEngine {
             // Convert CompletableFuture to a JS Promise
             // GraalVM automatically converts CompletableFuture to Promise when returned
             context.asValue(future)
+        }
+    }
+
+    /**
+     * Inject built-in API modules that can be imported.
+     * These modules are available via: import World from 'World'
+     */
+    private fun injectBuiltinModules(bindings: Value) {
+        // TODO: Phase 5-7 - Implement actual APIs
+        // For now, create placeholder objects so imports don't fail
+
+        val worldPlaceholder = ProxyObject.fromMap(mapOf(
+            "__placeholder" to true,
+            "toString" to ProxyExecutable { _ -> "World API (not yet implemented)" }
+        ))
+
+        val structurePlaceholder = ProxyObject.fromMap(mapOf(
+            "__placeholder" to true,
+            "toString" to ProxyExecutable { _ -> "Structure API (not yet implemented)" }
+        ))
+
+        val storePlaceholder = ProxyObject.fromMap(mapOf(
+            "__placeholder" to true,
+            "toString" to ProxyExecutable { _ -> "Store API (not yet implemented)" }
+        ))
+
+        val nbtPlaceholder = ProxyObject.fromMap(mapOf(
+            "__placeholder" to true,
+            "toString" to ProxyExecutable { _ -> "NBT API (not yet implemented)" }
+        ))
+
+        bindings.putMember("World", worldPlaceholder)
+        bindings.putMember("Structure", structurePlaceholder)
+        bindings.putMember("Store", storePlaceholder)
+        bindings.putMember("NBT", nbtPlaceholder)
+
+        ConfigManager.debug("Injected built-in module placeholders (World, Structure, Store, NBT)")
+    }
+
+    /**
+     * Inject Script.* context for utility scripts (rjs/scripts/).
+     * Provides Script.caller and Script.args for command-invoked scripts.
+     */
+    private fun injectScriptContext(bindings: Value, additionalBindings: Map<String, Any>) {
+        // Extract Caller and Args from additionalBindings if provided
+        val caller = additionalBindings["Caller"]
+        val args = additionalBindings["Args"]
+
+        if (caller != null || args != null) {
+            val scriptContext = mutableMapOf<String, Any?>()
+            if (caller != null) scriptContext["caller"] = caller
+            if (args != null) scriptContext["args"] = args
+
+            val scriptProxy = ProxyObject.fromMap(scriptContext)
+            bindings.putMember("Script", scriptProxy)
+            ConfigManager.debug("Injected Script.caller and Script.args")
         }
     }
 

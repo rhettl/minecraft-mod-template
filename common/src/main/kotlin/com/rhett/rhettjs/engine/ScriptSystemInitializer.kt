@@ -31,6 +31,9 @@ object ScriptSystemInitializer {
         val scriptsDir = getScriptsDirectory(null)
         ConfigManager.debug("Script directory: $scriptsDir")
 
+        // Set scripts directory for module resolution
+        GraalEngine.setScriptsDirectory(scriptsDir)
+
         // Ensure script directories exist
         createDirectories(scriptsDir)
 
@@ -84,6 +87,9 @@ object ScriptSystemInitializer {
      */
     fun reload(serverDirectory: Path) {
         val scriptsDir = getScriptsDirectory(serverDirectory)
+
+        // Update scripts directory for module resolution
+        GraalEngine.setScriptsDirectory(scriptsDir)
 
         RhettJSCommon.LOGGER.info("[RhettJS] Reloading scripts...")
 
