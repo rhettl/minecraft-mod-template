@@ -55,7 +55,7 @@ object ScriptSystemInitializer {
 
     /**
      * Initialize server resources on server start.
-     * Note: Startup and server scripts have already loaded earlier.
+     * Executes SERVER scripts and then registers custom commands.
      *
      * @param server The Minecraft server instance
      */
@@ -69,9 +69,12 @@ object ScriptSystemInitializer {
         // Initialize World API (needs server instance)
         initializeWorldAPI(server)
 
-        // Register custom commands (server scripts have loaded early and registered handlers)
-        // TODO: Implement custom command registration for GraalVM
-        // com.rhett.rhettjs.commands.CustomCommandRegistry.registerCommands()
+        // Execute SERVER scripts (event handlers, command registration)
+        executeServerScripts()
+
+        // Register custom commands with Brigadier (server scripts have now registered commands)
+        ConfigManager.debug("Registering custom commands with Brigadier...")
+        GraalEngine.getCommandRegistry().registerAll()
 
         RhettJSCommon.LOGGER.info("[RhettJS] Ready! Use /rjs list to see available scripts")
         ConfigManager.debug("Server resources initialization complete")
@@ -230,7 +233,28 @@ object ScriptSystemInitializer {
             }
         }
 
-        ConfigManager.debug("Startup handlers registered")
+        ConfigManager.debug("Startup scripts complete")
+    }
+
+    /**
+     * Execute server scripts.
+     * These run when the server starts, after APIs are initialized.
+     */
+    private fun executeServerScripts() {
+        val serverScripts = ScriptRegistry.getScripts(ScriptCategory.SERVER)
+        if (serverScripts.isNotEmpty()) {
+            RhettJSCommon.LOGGER.info("[RhettJS] Executing ${serverScripts.size} server scripts...")
+            serverScripts.forEach { script ->
+                try {
+                    GraalEngine.executeScript(script)
+                    ConfigManager.debug("Executed server script: ${script.name}")
+                } catch (e: Exception) {
+                    RhettJSCommon.LOGGER.error("[RhettJS] Failed to execute server script: ${script.name}", e)
+                }
+            }
+        }
+
+        ConfigManager.debug("Server scripts complete")
     }
 
 

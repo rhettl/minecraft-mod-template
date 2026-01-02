@@ -5,6 +5,7 @@ import com.rhett.rhettjs.config.ConfigManager
 import com.rhett.rhettjs.async.AsyncScheduler
 import com.rhett.rhettjs.api.StoreAPI
 import com.rhett.rhettjs.api.NamespacedStore
+import com.rhett.rhettjs.commands.CustomCommandRegistry
 import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.PolyglotException
 import org.graalvm.polyglot.Source
@@ -37,6 +38,9 @@ object GraalEngine {
     // Shared GraalVM context (created once, reused for all scripts)
     @Volatile
     private var sharedContext: Context? = null
+
+    // Custom command registry for Commands API
+    private val commandRegistry = CustomCommandRegistry()
 
     // Pre-compiled JavaScript helper functions (cached to avoid classloader issues)
     @Volatile
@@ -71,7 +75,26 @@ object GraalEngine {
         jsNBTMergeShallowHelper = null
         jsNBTMergeDeepHelper = null
         jsUndefinedValue = null
+        commandRegistry.clear()
         ConfigManager.debug("GraalVM engine reset")
+    }
+
+    /**
+     * Get the custom command registry for platform integration.
+     * Used by ScriptSystemInitializer to register commands with Brigadier after startup scripts load.
+     */
+    fun getCommandRegistry(): CustomCommandRegistry = commandRegistry
+
+    /**
+     * Store the command dispatcher for later command registration.
+     * Called during command registration event (before server/startup scripts run).
+     *
+     * @param dispatcher The Minecraft command dispatcher
+     */
+    fun storeCommandDispatcher(dispatcher: com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>) {
+        val context = getOrCreateContext()
+        commandRegistry.storeDispatcher(dispatcher, context)
+        ConfigManager.debug("Stored command dispatcher and GraalVM context")
     }
 
     /**
@@ -1171,14 +1194,12 @@ object GraalEngine {
      * Provides fluent builder API for command registration with Brigadier integration.
      */
     private fun createCommandsAPIProxy(): ProxyObject {
-        // Command registry (in-memory for now)
-        val registeredCommands = mutableMapOf<String, MutableMap<String, Any?>>()
-
         /**
          * Create a command builder that chains methods.
          */
         fun createCommandBuilder(name: String): ProxyObject {
-            val commandData = mutableMapOf<String, Any?>(
+            // Get existing command data or create new
+            val commandData = commandRegistry.getCommand(name)?.toMutableMap() ?: mutableMapOf(
                 "name" to name,
                 "description" to null,
                 "permission" to null,
@@ -1186,7 +1207,8 @@ object GraalEngine {
                 "executor" to null
             )
 
-            registeredCommands[name] = commandData
+            // Store in registry
+            commandRegistry.storeCommand(name, commandData)
 
             return ProxyObject.fromMap(mapOf(
                 "description" to ProxyExecutable { args ->
@@ -1262,7 +1284,9 @@ object GraalEngine {
                     throw IllegalArgumentException("unregister() requires a command name")
                 }
                 val name = args[0].asString()
-                registeredCommands.remove(name)
+                // Remove from registry by storing null/empty
+                val emptyData = mutableMapOf<String, Any?>()
+                commandRegistry.storeCommand(name, emptyData)
                 ConfigManager.debug("Unregistered command: $name")
                 null
             }

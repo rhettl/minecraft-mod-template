@@ -3,6 +3,7 @@ package com.rhett.rhettjs
 import com.rhett.rhettjs.commands.RJSCommand
 import com.rhett.rhettjs.config.ConfigManager
 import com.rhett.rhettjs.engine.ScriptSystemInitializer
+import com.rhett.rhettjs.engine.GraalEngine
 import com.rhett.rhettjs.threading.TickScheduler
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.bus.api.SubscribeEvent
@@ -75,8 +76,8 @@ class RhettJS(modEventBus: IEventBus) {
             RJSCommand.register(event.dispatcher)
             ConfigManager.debug("Registered /rjs command")
 
-            // TODO: Store dispatcher for custom commands (GraalVM)
-            // com.rhett.rhettjs.commands.CustomCommandRegistry.storeDispatcher(event.dispatcher)
+            // Store dispatcher for custom commands (registered after startup scripts)
+            GraalEngine.storeCommandDispatcher(event.dispatcher)
         }
     }
 

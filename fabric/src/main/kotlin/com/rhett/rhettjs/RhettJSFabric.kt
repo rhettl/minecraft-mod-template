@@ -3,6 +3,7 @@ package com.rhett.rhettjs
 import com.rhett.rhettjs.commands.RJSCommand
 import com.rhett.rhettjs.config.ConfigManager
 import com.rhett.rhettjs.engine.ScriptSystemInitializer
+import com.rhett.rhettjs.engine.GraalEngine
 import com.rhett.rhettjs.threading.TickScheduler
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
@@ -42,8 +43,7 @@ class RhettJSFabric : ModInitializer {
             ConfigManager.debug("Registered /rjs command")
 
             // Store dispatcher for custom commands (registered after startup scripts)
-            // TODO: Store dispatcher for custom commands (GraalVM)
-            // com.rhett.rhettjs.commands.CustomCommandRegistry.storeDispatcher(dispatcher)
+            GraalEngine.storeCommandDispatcher(dispatcher)
         }
 
         // Register tick handler for schedule() processing
