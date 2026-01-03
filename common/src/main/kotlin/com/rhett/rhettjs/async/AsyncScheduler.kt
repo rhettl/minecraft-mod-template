@@ -25,6 +25,9 @@ object AsyncScheduler {
     // List of active timers (modified only on server thread)
     private val activeTimers = mutableListOf<TickTimer>()
 
+    // Queue of callbacks to execute after timer processing
+    private val pendingCallbacks = mutableListOf<() -> Unit>()
+
     /**
      * Schedule a delay that will complete after the specified number of ticks.
      *
@@ -46,35 +49,64 @@ object AsyncScheduler {
     }
 
     /**
+     * Schedule a callback to run after timer processing completes.
+     * This prevents ConcurrentModificationException when callbacks trigger new wait() calls.
+     */
+    fun scheduleCallback(callback: () -> Unit) {
+        synchronized(pendingCallbacks) {
+            pendingCallbacks.add(callback)
+        }
+    }
+
+    /**
      * Process all active timers. Should be called once per server tick.
      * Decrements all timer counters and completes futures that reach zero.
      */
     fun tick() {
-        if (activeTimers.isEmpty()) return
+        // Process timers
+        if (activeTimers.isNotEmpty()) {
+            synchronized(activeTimers) {
+                val iterator = activeTimers.iterator()
+                var completedCount = 0
 
-        synchronized(activeTimers) {
-            val iterator = activeTimers.iterator()
-            var completedCount = 0
+                while (iterator.hasNext()) {
+                    val timer = iterator.next()
+                    timer.ticksRemaining--
 
-            while (iterator.hasNext()) {
-                val timer = iterator.next()
-                timer.ticksRemaining--
+                    if (timer.ticksRemaining <= 0) {
+                        iterator.remove()
+                        timer.future.complete(Unit)
+                        completedCount++
+                    }
+                }
 
-                if (timer.ticksRemaining <= 0) {
-                    iterator.remove()
-                    timer.future.complete(Unit)
-                    completedCount++
+                if (completedCount > 0) {
+                    ConfigManager.debug("Completed $completedCount timer(s), ${activeTimers.size} remaining")
                 }
             }
+        }
 
-            if (completedCount > 0) {
-                ConfigManager.debug("Completed $completedCount timer(s), ${activeTimers.size} remaining")
+        // Execute pending callbacks after timer processing
+        if (pendingCallbacks.isNotEmpty()) {
+            val callbacks = synchronized(pendingCallbacks) {
+                val copy = pendingCallbacks.toList()
+                pendingCallbacks.clear()
+                copy
+            }
+
+            // Execute callbacks outside synchronized block
+            callbacks.forEach { callback ->
+                try {
+                    callback()
+                } catch (e: Exception) {
+                    RhettJSCommon.LOGGER.error("[RhettJS] Error executing wait() callback", e)
+                }
             }
         }
     }
 
     /**
-     * Clear all pending timers. Used during server shutdown or script reload.
+     * Clear all pending timers and callbacks. Used during server shutdown or script reload.
      */
     fun clear() {
         synchronized(activeTimers) {
@@ -91,6 +123,10 @@ object AsyncScheduler {
 
                 activeTimers.clear()
             }
+        }
+
+        synchronized(pendingCallbacks) {
+            pendingCallbacks.clear()
         }
     }
 

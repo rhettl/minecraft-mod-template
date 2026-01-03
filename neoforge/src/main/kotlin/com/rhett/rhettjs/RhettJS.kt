@@ -15,6 +15,7 @@ import net.neoforged.fml.loading.FMLPaths
 import net.neoforged.neoforge.common.NeoForge
 import net.neoforged.neoforge.event.AddReloadListenerEvent
 import net.neoforged.neoforge.event.RegisterCommandsEvent
+import net.neoforged.neoforge.event.entity.player.PlayerEvent
 import net.neoforged.neoforge.event.server.ServerStartedEvent
 import net.neoforged.neoforge.event.server.ServerStartingEvent
 import net.neoforged.neoforge.event.server.ServerStoppingEvent
@@ -44,6 +45,10 @@ class RhettJS(modEventBus: IEventBus) {
             // Register block event handlers
             NeoForge.EVENT_BUS.register(com.rhett.rhettjs.events.NeoForgeBlockEventHandler)
             ConfigManager.debug("Registered block event handlers")
+
+            // Register player connection event handlers (Server API)
+            NeoForge.EVENT_BUS.register(PlayerEventHandler)
+            ConfigManager.debug("Registered player connection event handlers")
 
             // Register reload listener handler for SERVER scripts
             NeoForge.EVENT_BUS.register(ReloadListenerHandler)
@@ -78,7 +83,7 @@ class RhettJS(modEventBus: IEventBus) {
     }
 
     /**
-     * Handles datapack reload for SERVER scripts.
+     * Handles datapack reload to rescan all scripts and execute SERVER scripts.
      */
     object ReloadListenerHandler {
         @SubscribeEvent
@@ -92,14 +97,22 @@ class RhettJS(modEventBus: IEventBus) {
                     backgroundExecutor: Executor,
                     gameExecutor: Executor
                 ): CompletableFuture<Void> {
-                    // Execute SERVER scripts on the game thread
+                    // Execute on the game thread
                     return preparationBarrier.wait(Unit).thenRunAsync({
-                        RhettJSCommon.LOGGER.info("[RhettJS] Reloading server scripts (datapack reload)...")
+                        RhettJSCommon.LOGGER.info("[RhettJS] Reloading scripts (datapack reload)...")
+
+                        // Rescan all scripts (including utility scripts) to pick up new/changed files
+                        val serverDirectory = FMLPaths.GAMEDIR.get().resolve(".")
+                        val scriptsDir = ScriptSystemInitializer.getScriptsDirectory(serverDirectory)
+                        com.rhett.rhettjs.engine.ScriptRegistry.scan(scriptsDir)
+                        ConfigManager.debug("Rescanned scripts directory on /reload")
+
+                        // Execute SERVER scripts
                         ScriptSystemInitializer.executeServerScripts()
                     }, gameExecutor)
                 }
             })
-            ConfigManager.debug("Added reload listener for server scripts")
+            ConfigManager.debug("Added reload listener for script rescan and server script execution")
         }
     }
 
@@ -139,6 +152,29 @@ class RhettJS(modEventBus: IEventBus) {
         fun onServerStopping(event: ServerStoppingEvent) {
             RhettJSCommon.LOGGER.info("[RhettJS] Shutting down...")
             ConfigManager.debug("Server stopping, cleaning up")
+        }
+    }
+
+    /**
+     * Handles player connection events (Server API).
+     */
+    object PlayerEventHandler {
+        @SubscribeEvent
+        fun onPlayerLoggedIn(event: PlayerEvent.PlayerLoggedInEvent) {
+            if (event.entity is net.minecraft.server.level.ServerPlayer) {
+                val player = event.entity as net.minecraft.server.level.ServerPlayer
+                com.rhett.rhettjs.events.ServerEventManager.triggerPlayerJoin(player)
+                ConfigManager.debug("Player joined: ${player.name.string}")
+            }
+        }
+
+        @SubscribeEvent
+        fun onPlayerLoggedOut(event: PlayerEvent.PlayerLoggedOutEvent) {
+            if (event.entity is net.minecraft.server.level.ServerPlayer) {
+                val player = event.entity as net.minecraft.server.level.ServerPlayer
+                com.rhett.rhettjs.events.ServerEventManager.triggerPlayerLeave(player)
+                ConfigManager.debug("Player disconnected: ${player.name.string}")
+            }
         }
     }
 }

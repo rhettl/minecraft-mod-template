@@ -57,7 +57,7 @@ data class PositionedBlock(
     val y: Int,
     val z: Int,
     val block: BlockData,
-    val blockEntityData: Map<String, Any>? = null  // NBT data for chests, signs, etc.
+    val blockEntityData: Any? = null  // Can be Map<String, Any> or net.minecraft.nbt.CompoundTag for structures
 )
 
 /**

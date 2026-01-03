@@ -71,6 +71,12 @@ object ScriptSystemInitializer {
         val serverDirectory = server.serverDirectory
         ConfigManager.debug("Server starting, initializing server resources")
 
+        // Set server reference for managers
+        com.rhett.rhettjs.events.ServerEventManager.setServer(server)
+        com.rhett.rhettjs.world.WorldManager.setServer(server)
+        com.rhett.rhettjs.structure.StructureManager.setServer(server)
+        ConfigManager.debug("ServerEventManager, WorldManager, and StructureManager initialized with server reference")
+
         // Initialize Structure API (needs server directory)
         initializeStructureAPI(serverDirectory)
 

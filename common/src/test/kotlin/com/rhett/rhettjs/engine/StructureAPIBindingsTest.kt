@@ -182,7 +182,7 @@ class StructureAPIBindingsTest {
                 import Structure from 'Structure';
 
                 const pos = { x: 0, y: 64, z: 0, dimension: 'minecraft:overworld' };
-                const promise = Structure.place('test', pos, 0);
+                const promise = Structure.place(pos, 'test');
 
                 if (!(promise instanceof Promise)) {
                     throw new Error('Structure.place should return a Promise');
@@ -208,7 +208,7 @@ class StructureAPIBindingsTest {
 
                 const pos1 = { x: 0, y: 64, z: 0, dimension: 'minecraft:overworld' };
                 const pos2 = { x: 5, y: 69, z: 5, dimension: 'minecraft:overworld' };
-                const promise = Structure.capture('test', pos1, pos2);
+                const promise = Structure.capture(pos1, pos2, 'test');
 
                 if (!(promise instanceof Promise)) {
                     throw new Error('Structure.capture should return a Promise');
@@ -261,8 +261,8 @@ class StructureAPIBindingsTest {
                 import Structure from 'Structure';
 
                 const pos = { x: 0, y: 64, z: 0, dimension: 'minecraft:overworld' };
-                const promise1 = Structure.place('test', pos);
-                const promise2 = Structure.place('test', pos, 90);
+                const promise1 = Structure.place(pos, 'test');
+                const promise2 = Structure.place(pos, 'test', { rotation: 90 });
 
                 if (!(promise1 instanceof Promise)) {
                     throw new Error('Structure.place without rotation should return Promise');

@@ -155,8 +155,8 @@ try {
         .description('Test async command with wait')
         .executes(async ({ caller }) => {
             console.log('✓ testwait started');
-            caller.sendMessage('Waiting 1 second...');
-            await wait(20); // Wait 1 second
+            caller.sendMessage('Waiting 10 second...');
+            await wait(200); // Wait 1 second
             caller.sendMessage('Done!');
             console.log('✓ testwait completed');
         });

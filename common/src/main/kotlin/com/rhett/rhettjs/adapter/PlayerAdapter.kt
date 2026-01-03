@@ -53,6 +53,7 @@ object PlayerAdapter {
             // Properties (read live from player)
             "name" to player.name.string,
             "uuid" to player.stringUUID,
+            "isPlayer" to true, // Always true for player objects
             "health" to player.health.toDouble(),
             "maxHealth" to player.maxHealth.toDouble(),
             "foodLevel" to player.foodData.foodLevel,

@@ -215,8 +215,12 @@ class WorldAdapter(private val server: MinecraftServer) {
             positioned.blockEntityData?.let { nbtData ->
                 val blockEntity = level.getBlockEntity(pos)
                 if (blockEntity != null) {
-                    // Convert Map -> NBT CompoundTag
-                    val nbtTag = convertMapToNbt(nbtData)
+                    // Handle both CompoundTag (from structures) and Map (from API)
+                    val nbtTag = when (nbtData) {
+                        is net.minecraft.nbt.CompoundTag -> nbtData
+                        is Map<*, *> -> convertMapToNbt(nbtData as Map<String, Any>)
+                        else -> return@let
+                    }
 
                     // Load NBT into block entity
                     blockEntity.loadWithComponents(nbtTag, level.registryAccess())

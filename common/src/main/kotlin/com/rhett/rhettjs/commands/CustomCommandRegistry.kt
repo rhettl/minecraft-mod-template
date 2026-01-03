@@ -12,6 +12,7 @@ import net.minecraft.commands.Commands
 import net.minecraft.commands.arguments.EntityArgument
 import net.minecraft.commands.arguments.item.ItemArgument
 import net.minecraft.commands.arguments.blocks.BlockStateArgument
+import net.minecraft.server.level.ServerPlayer
 import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.Value
 import org.graalvm.polyglot.proxy.ProxyObject
@@ -116,7 +117,7 @@ class CustomCommandRegistry {
             try {
                 validateCommand(data)
                 ConfigManager.debug("[Commands] Building Brigadier command for: /$name")
-                val command = buildCommand(name, data, ctx)
+                val command = buildCommand(name, data)
                 ConfigManager.debug("[Commands] Registering with dispatcher: /$name")
                 disp.register(command)
                 ConfigManager.debug("[Commands] ✓ Successfully registered: /$name")
@@ -172,8 +173,7 @@ class CustomCommandRegistry {
      */
     private fun buildCommand(
         name: String,
-        data: Map<String, Any?>,
-        context: Context
+        data: Map<String, Any?>
     ): LiteralArgumentBuilder<CommandSourceStack> {
         val commandBuilder = Commands.literal(name)
 
@@ -184,8 +184,17 @@ class CustomCommandRegistry {
                 // Look up permission dynamically from registry (supports /reload)
                 val currentData = getCommand(name)
                 val currentPermission = currentData?.get("permission")
+                ConfigManager.debug("[Commands] Requires check for /$name: permission=$currentPermission, context=${this.context != null}")
                 if (currentPermission != null) {
-                    checkPermission(currentPermission, source, context)
+                    val currentContext = this.context
+                    if (currentContext != null) {
+                        val result = checkPermission(currentPermission, source, currentContext)
+                        ConfigManager.debug("[Commands] Permission result for /$name: $result")
+                        result
+                    } else {
+                        ConfigManager.debug("[Commands] No context for /$name, allowing")
+                        true // No context available, allow by default
+                    }
                 } else {
                     true // No permission check
                 }
@@ -212,11 +221,13 @@ class CustomCommandRegistry {
                     throw IllegalStateException("Command $name has no executor")
                 }
                 ConfigManager.debug("[Commands] Found executor for /$name, calling handler...")
-                executeHandler(executor, brigadierContext, emptyList(), context)
+                // Look up current context from registry (supports /reload)
+                val currentContext = this.context ?: throw IllegalStateException("GraalVM context not available")
+                executeHandler(executor, brigadierContext, emptyList(), currentContext)
             }
         } else {
             // Has arguments - build argument chain (also looks up executor dynamically)
-            buildArgumentChain(commandBuilder, arguments, name, context)
+            buildArgumentChain(commandBuilder, arguments, name)
         }
 
         return commandBuilder
@@ -228,8 +239,7 @@ class CustomCommandRegistry {
     private fun buildArgumentChain(
         baseBuilder: LiteralArgumentBuilder<CommandSourceStack>,
         arguments: List<Map<String, String>>,
-        commandName: String,
-        context: Context
+        commandName: String
     ) {
         // Build from the last argument backwards
         var currentNode: Any = Commands.argument(
@@ -249,7 +259,9 @@ class CustomCommandRegistry {
                 throw IllegalStateException("Command $commandName has no executor")
             }
             ConfigManager.debug("[Commands] Found executor for /$commandName, calling handler...")
-            executeHandler(executor, brigadierContext, arguments, context)
+            // Look up current context from registry (supports /reload)
+            val currentContext = this.context ?: throw IllegalStateException("GraalVM context not available")
+            executeHandler(executor, brigadierContext, arguments, currentContext)
         }
 
         // Add remaining arguments in reverse order
@@ -372,7 +384,7 @@ class CustomCommandRegistry {
                 val value: Any? = when (type) {
                     "string" -> StringArgumentType.getString(brigadierContext, name)
                     "int" -> IntegerArgumentType.getInteger(brigadierContext, name)
-                    "float" -> FloatArgumentType.getFloat(brigadierContext, name)
+                    "float" -> FloatArgumentType.getFloat(brigadierContext, name).toDouble()
                     "player" -> {
                         // Extract player and wrap it
                         ConfigManager.debug("[Commands] Extracting player argument: $name")
@@ -383,19 +395,30 @@ class CustomCommandRegistry {
                         wrappedPlayer
                     }
                     "item" -> {
-                        // For now, return item ID as string
-                        // TODO: Proper item handling
-                        brigadierContext.getArgument(name, String::class.java)
+                        // Extract ItemInput and convert to resource location string
+                        val itemInput = net.minecraft.commands.arguments.item.ItemArgument.getItem(brigadierContext, name)
+                        val itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(itemInput.item).toString()
+                        ConfigManager.debug("[Commands] Extracted item: $itemId")
+                        itemId
                     }
                     "block" -> {
-                        // For now, return block ID as string
-                        // TODO: Proper block handling
-                        brigadierContext.getArgument(name, String::class.java)
+                        // Extract BlockInput and convert to resource location string
+                        val blockInput = net.minecraft.commands.arguments.blocks.BlockStateArgument.getBlock(brigadierContext, name)
+                        val blockId = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(blockInput.state.block).toString()
+                        ConfigManager.debug("[Commands] Extracted block: $blockId")
+                        blockId
                     }
                     "entity" -> {
-                        // Return entity selector as string for now
-                        // TODO: Proper entity handling
-                        brigadierContext.getArgument(name, String::class.java)
+                        // Extract entity and return basic info
+                        val entity = EntityArgument.getEntity(brigadierContext, name)
+                        val entityType = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(entity.type).toString()
+                        val entityInfo = mapOf(
+                            "name" to entity.name.string,
+                            "type" to entityType,
+                            "uuid" to entity.uuid.toString()
+                        )
+                        ConfigManager.debug("[Commands] Extracted entity: $entityType")
+                        graalContext.asValue(entityInfo)
                     }
                     else -> null
                 }
@@ -427,9 +450,20 @@ class CustomCommandRegistry {
     ): Boolean {
         return when (permission) {
             is String -> {
-                // String permission - check op level or permission system
-                // For now, just check op level 2+
-                source.hasPermission(2)
+                // String permission - check if source entity is an operator
+                // TODO: Integrate with proper permission system (e.g., LuckPerms)
+                val entity = source.entity
+                if (entity is ServerPlayer) {
+                    // Check if player is an operator OR has permission level 2+ (single player)
+                    val server = entity.server
+                    val isOp = server?.playerList?.isOp(entity.gameProfile) ?: false
+                    val hasPermLevel = source.hasPermission(2)
+                    ConfigManager.debug("[Commands] Permission check for ${entity.name.string}: isOp=$isOp, permLevel2+=$hasPermLevel")
+                    isOp || hasPermLevel
+                } else {
+                    // Non-player sources (console, command blocks) have full permissions
+                    true
+                }
             }
             is Value -> {
                 if (permission.canExecute()) {
@@ -440,6 +474,20 @@ class CustomCommandRegistry {
                         result.asBoolean()
                     } catch (e: Exception) {
                         false
+                    }
+                } else if (permission.isString) {
+                    // String permission wrapped in Value - check if source entity is an operator
+                    val entity = source.entity
+                    if (entity is ServerPlayer) {
+                        // Check if player is an operator OR has permission level 2+ (single player)
+                        val server = entity.server
+                        val isOp = server?.playerList?.isOp(entity.gameProfile) ?: false
+                        val hasPermLevel = source.hasPermission(2)
+                        ConfigManager.debug("[Commands] Permission check for ${entity.name.string}: isOp=$isOp, permLevel2+=$hasPermLevel")
+                        isOp || hasPermLevel
+                    } else {
+                        // Non-player sources (console, command blocks) have full permissions
+                        true
                     }
                 } else {
                     false

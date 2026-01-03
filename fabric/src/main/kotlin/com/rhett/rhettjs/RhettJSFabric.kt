@@ -9,6 +9,7 @@ import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener
 import net.fabricmc.loader.api.FabricLoader
@@ -38,10 +39,18 @@ class RhettJSFabric : ModInitializer {
         // Load startup scripts early (dimensions via rjs/data/ datapack)
         ScriptSystemInitializer.initializeStartupScripts()
 
-        // Register reload listener for SERVER scripts (executes on initial load + /reload)
+        // Register reload listener to rescan all scripts and execute SERVER scripts on /reload
         ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(object : SimpleSynchronousResourceReloadListener {
             override fun onResourceManagerReload(manager: ResourceManager) {
-                RhettJSCommon.LOGGER.info("[RhettJS] Reloading server scripts (datapack reload)...")
+                RhettJSCommon.LOGGER.info("[RhettJS] Reloading scripts (datapack reload)...")
+
+                // Rescan all scripts (including utility scripts) to pick up new/changed files
+                val serverDirectory = FabricLoader.getInstance().gameDir.resolve(".")
+                val scriptsDir = ScriptSystemInitializer.getScriptsDirectory(serverDirectory)
+                com.rhett.rhettjs.engine.ScriptRegistry.scan(scriptsDir)
+                ConfigManager.debug("Rescanned scripts directory on /reload")
+
+                // Execute SERVER scripts
                 ScriptSystemInitializer.executeServerScripts()
             }
 
@@ -49,11 +58,23 @@ class RhettJSFabric : ModInitializer {
                 return ResourceLocation.fromNamespaceAndPath(RhettJSCommon.MOD_ID, "server_scripts")
             }
         })
-        ConfigManager.debug("Registered reload listener for server scripts")
+        ConfigManager.debug("Registered reload listener for script rescan and server script execution")
 
         // Register block event handlers
         com.rhett.rhettjs.events.FabricBlockEventHandler.register()
         ConfigManager.debug("Registered block event handlers")
+
+        // Register player connection event handlers (Server API)
+        ServerPlayConnectionEvents.JOIN.register { handler, _, _ ->
+            com.rhett.rhettjs.events.ServerEventManager.triggerPlayerJoin(handler.player)
+            ConfigManager.debug("Player joined: ${handler.player.name.string}")
+        }
+
+        ServerPlayConnectionEvents.DISCONNECT.register { handler, _ ->
+            com.rhett.rhettjs.events.ServerEventManager.triggerPlayerLeave(handler.player)
+            ConfigManager.debug("Player disconnected: ${handler.player.name.string}")
+        }
+        ConfigManager.debug("Registered player connection event handlers")
 
         // Register commands
         CommandRegistrationCallback.EVENT.register { dispatcher, registryAccess, environment ->

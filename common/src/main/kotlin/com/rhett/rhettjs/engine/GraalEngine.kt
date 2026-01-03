@@ -14,6 +14,7 @@ import org.graalvm.polyglot.io.FileSystem
 import org.graalvm.polyglot.io.IOAccess
 import org.graalvm.polyglot.proxy.ProxyExecutable
 import org.graalvm.polyglot.proxy.ProxyObject
+import java.util.concurrent.CompletableFuture
 
 /**
  * Exception thrown when Runtime.exit() is called.
@@ -65,18 +66,34 @@ object GraalEngine {
 
     /**
      * Reset the GraalVM engine (called on reload).
-     * Closes the existing context and clears cached state.
+     *
+     * Note: Closing and recreating the context within the same JVM session
+     * should work because the native libraries are already loaded.
+     * We only get "Native Library already loaded" errors if we try to reload
+     * them in a different classloader (which doesn't happen here).
      */
     fun reset() {
+        // Close and recreate context to pick up any config changes
         sharedContext?.close()
         sharedContext = null
+
+        // Clear cached helpers (will be re-initialized on next script execution)
         jsNBTSetHelper = null
         jsNBTDeleteHelper = null
         jsNBTMergeShallowHelper = null
         jsNBTMergeDeepHelper = null
         jsUndefinedValue = null
+
+        // Clear command registry and context reference
         commandRegistry.clear()
-        ConfigManager.debug("GraalVM engine reset")
+        commandRegistry.context = null
+
+        // Reset managers (they will get new context references when context is recreated)
+        com.rhett.rhettjs.events.ServerEventManager.reset()
+        com.rhett.rhettjs.world.WorldManager.reset()
+        com.rhett.rhettjs.structure.StructureManager.reset()
+
+        ConfigManager.debug("GraalVM engine reset (context closed, will be recreated)")
     }
 
     /**
@@ -117,6 +134,10 @@ object GraalEngine {
             .option("js.top-level-await", "true")  // Enable top-level await
             .option("engine.WarnInterpreterOnly", "false")  // Suppress JVMCI warning
 
+            // Enable multi-threading for World API (server thread callbacks)
+            .allowCreateThread(true)
+            .option("js.shared-array-buffer", "true")
+
         // Set up custom FileSystem for module resolution
         // This enables bare specifier imports like: import World from 'World'
         if (scriptsBaseDir != null) {
@@ -144,15 +165,28 @@ object GraalEngine {
     /**
      * Get or create the shared GraalVM context.
      * Creates the context on first use, then reuses it for all subsequent scripts.
+     * Re-initializes helpers if they were cleared by reset().
      */
     private fun getOrCreateContext(): Context {
-        return sharedContext ?: synchronized(this) {
-            sharedContext ?: createContext().also { ctx ->
-                sharedContext = ctx
-                initializeJSHelpers(ctx)
+        val ctx = sharedContext ?: synchronized(this) {
+            sharedContext ?: createContext().also { newCtx ->
+                sharedContext = newCtx
+                initializeJSHelpers(newCtx)
+                // Set context reference in managers
+                com.rhett.rhettjs.events.ServerEventManager.setContext(newCtx)
+                com.rhett.rhettjs.world.WorldManager.setContext(newCtx)
+                com.rhett.rhettjs.structure.StructureManager.setContext(newCtx)
                 ConfigManager.debug("Created shared GraalVM context with pre-compiled helpers")
             }
         }
+
+        // Re-initialize helpers if they were cleared by reset()
+        if (jsNBTSetHelper == null || jsNBTDeleteHelper == null) {
+            initializeJSHelpers(ctx)
+            ConfigManager.debug("Re-initialized helpers after reset")
+        }
+
+        return ctx
     }
 
     /**
@@ -512,9 +546,40 @@ object GraalEngine {
             // Schedule the delay and get a CompletableFuture
             val future = AsyncScheduler.scheduleWait(ticks)
 
-            // Convert CompletableFuture to a JS Promise
-            // GraalVM automatically converts CompletableFuture to Promise when returned
-            context.asValue(future)
+            // Create a JavaScript Promise that resolves when the CompletableFuture completes
+            // We need to evaluate JavaScript code to create a proper Promise object
+            val promiseCode = """
+                new Promise((resolve, reject) => {
+                    // The resolve/reject functions will be called from Kotlin
+                    globalThis.__waitResolve = resolve;
+                    globalThis.__waitReject = reject;
+                })
+            """
+            val promise = context.eval("js", promiseCode)
+
+            // Get the resolve and reject functions
+            val resolve = context.getBindings("js").getMember("__waitResolve")
+            val reject = context.getBindings("js").getMember("__waitReject")
+
+            // Clean up the global references
+            context.getBindings("js").removeMember("__waitResolve")
+            context.getBindings("js").removeMember("__waitReject")
+
+            // When the future completes, schedule the promise resolution on the next tick
+            // This prevents ConcurrentModificationException if JS code calls wait() again
+            future.whenComplete { _, throwable ->
+                // Schedule the callback to run on the next server tick
+                // This ensures we're not executing JS during timer iteration
+                AsyncScheduler.scheduleCallback {
+                    if (throwable != null) {
+                        reject.execute(throwable.message)
+                    } else {
+                        resolve.execute()
+                    }
+                }
+            }
+
+            promise
         }
     }
 
@@ -926,71 +991,59 @@ object GraalEngine {
     /**
      * Create Structure API proxy for JavaScript.
      * All methods return Promises (async file I/O and world operations).
-     *
-     * Since we're in a ProxyExecutable context, we can't safely eval new code.
-     * Instead, we use a simpler approach: return objects that GraalVM will convert to Promises.
+     * Delegates to StructureManager for actual implementation.
      */
     private fun createStructureAPIProxy(): ProxyObject {
         val context = getOrCreateContext()
 
-        // Create Promise helper functions once and cache them
-        val promiseResolve = context.eval("js", "(value) => Promise.resolve(value)")
-        val promiseReject = context.eval("js", "(msg) => Promise.reject(new Error(msg))")
-
         return ProxyObject.fromMap(mapOf(
-            "load" to ProxyExecutable { args ->
+            // File operations (async) - delegate to StructureManager
+            "exists" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
-                    promiseReject.execute("load() requires a structure name")
-                } else {
-                    // TODO: Implement actual file loading
-                    promiseReject.execute("Structure.load() not yet implemented")
+                    return@ProxyExecutable createRejectedPromise(context, "exists() requires a structure name")
                 }
+                val name = args[0].asString()
+                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.exists(name))
             },
-            "save" to ProxyExecutable { args ->
-                if (args.size < 2) {
-                    promiseReject.execute("save() requires name and data")
-                } else {
-                    // TODO: Implement actual file saving
-                    promiseResolve.execute(null)
-                }
+            "list" to ProxyExecutable { args ->
+                val namespace = if (args.isNotEmpty()) args[0].asString() else null
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.list(namespace))
             },
             "delete" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
-                    promiseReject.execute("delete() requires a structure name")
-                } else {
-                    // TODO: Implement actual file deletion
-                    promiseResolve.execute(false)
+                    return@ProxyExecutable createRejectedPromise(context, "delete() requires a structure name")
                 }
+                val name = args[0].asString()
+                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.delete(name))
             },
-            "exists" to ProxyExecutable { args ->
-                if (args.isEmpty()) {
-                    promiseReject.execute("exists() requires a structure name")
-                } else {
-                    // TODO: Implement actual file check
-                    promiseResolve.execute(false)
+
+            // Structure operations (async) - delegate to StructureManager
+            "capture" to ProxyExecutable { args ->
+                if (args.size < 3) {
+                    return@ProxyExecutable createRejectedPromise(context, "capture() requires pos1, pos2, and name")
                 }
-            },
-            "list" to ProxyExecutable { args ->
-                // Optional pool parameter
-                // TODO: Implement actual file listing
-                promiseResolve.execute(emptyList<String>())
+                val pos1 = args[0]
+                val pos2 = args[1]
+                val name = args[2].asString()
+                val options = if (args.size > 3) args[3] else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.capture(pos1, pos2, name, options))
             },
             "place" to ProxyExecutable { args ->
                 if (args.size < 2) {
-                    promiseReject.execute("place() requires name and position")
-                } else {
-                    // Optional rotation parameter (args[2])
-                    // TODO: Implement actual structure placement
-                    promiseResolve.execute(null)
+                    return@ProxyExecutable createRejectedPromise(context, "place() requires position and name")
                 }
+                val position = args[0]
+                val name = args[1].asString()
+                val options = if (args.size > 2) args[2] else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.place(position, name, options))
             },
-            "capture" to ProxyExecutable { args ->
-                if (args.size < 3) {
-                    promiseReject.execute("capture() requires name, pos1, and pos2")
-                } else {
-                    // TODO: Implement actual structure capture
-                    promiseResolve.execute(null)
-                }
+
+            // TODO: Implement load() and save() for direct structure data access
+            "load" to ProxyExecutable { args ->
+                createRejectedPromise(context, "Structure.load() not yet implemented - use capture/place instead")
+            },
+            "save" to ProxyExecutable { args ->
+                createRejectedPromise(context, "Structure.save() not yet implemented - use capture/place instead")
             }
         ))
     }
@@ -998,129 +1051,206 @@ object GraalEngine {
     /**
      * Create World API proxy for JavaScript.
      * All methods return Promises except for the dimensions property.
+     * Delegates to WorldManager for actual implementation.
      */
     private fun createWorldAPIProxy(): ProxyObject {
         val context = getOrCreateContext()
 
-        // Create Promise helper functions
-        val promiseResolve = context.eval("js", "(value) => Promise.resolve(value)")
-        val promiseReject = context.eval("js", "(msg) => Promise.reject(new Error(msg))")
-
-        return ProxyObject.fromMap(mapOf(
-            // Sync property: dimensions list
-            "dimensions" to listOf("minecraft:overworld", "minecraft:the_nether", "minecraft:the_end"),
-
-            // Block operations (async)
+        // Create methods map
+        val methods = mapOf(
+            // Block operations (async) - delegate to WorldManager
             "getBlock" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
-                    promiseReject.execute("getBlock() requires a position")
-                } else {
-                    // TODO: Implement actual block query
-                    promiseReject.execute("World.getBlock() not yet implemented")
+                    return@ProxyExecutable createRejectedPromise(context, "getBlock() requires a position")
                 }
+                convertFutureToPromise<Value>(context, com.rhett.rhettjs.world.WorldManager.getBlock(args[0]))
             },
             "setBlock" to ProxyExecutable { args ->
                 if (args.size < 2) {
-                    promiseReject.execute("setBlock() requires position and blockId")
-                } else {
-                    // Optional properties parameter (args[2])
-                    // TODO: Implement actual block placement
-                    promiseResolve.execute(null)
+                    return@ProxyExecutable createRejectedPromise(context, "setBlock() requires position and blockId")
                 }
+                val position = args[0]
+                val blockId = args[1].asString()
+                val properties = if (args.size > 2) args[2] else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.world.WorldManager.setBlock(position, blockId, properties))
             },
             "fill" to ProxyExecutable { args ->
                 if (args.size < 3) {
-                    promiseReject.execute("fill() requires pos1, pos2, and blockId")
-                } else {
-                    // TODO: Implement actual fill operation
-                    promiseResolve.execute(0)
+                    return@ProxyExecutable createRejectedPromise(context, "fill() requires pos1, pos2, and blockId")
                 }
+                val pos1 = args[0]
+                val pos2 = args[1]
+                val blockId = args[2].asString()
+                convertFutureToPromise<Int>(context, com.rhett.rhettjs.world.WorldManager.fill(pos1, pos2, blockId))
             },
             "replace" to ProxyExecutable { args ->
                 if (args.size < 4) {
-                    promiseReject.execute("replace() requires pos1, pos2, filter, and replacement")
-                } else {
-                    // TODO: Implement actual replace operation
-                    promiseResolve.execute(0)
+                    return@ProxyExecutable createRejectedPromise(context, "replace() requires pos1, pos2, filter, and replacement")
                 }
+                // TODO: Implement replace operation in WorldManager
+                createRejectedPromise(context, "World.replace() not yet implemented")
             },
 
-            // Entity operations (async)
+            // Entity operations (async) - delegate to WorldManager
             "getEntities" to ProxyExecutable { args ->
                 if (args.size < 2) {
-                    promiseReject.execute("getEntities() requires position and radius")
-                } else {
-                    // TODO: Implement actual entity query
-                    promiseResolve.execute(emptyList<Any>())
+                    return@ProxyExecutable createRejectedPromise(context, "getEntities() requires position and radius")
                 }
+                val position = args[0]
+                val radius = args[1].asDouble()
+                convertFutureToPromise<List<Value>>(context, com.rhett.rhettjs.world.WorldManager.getEntities(position, radius))
             },
             "spawnEntity" to ProxyExecutable { args ->
                 if (args.size < 2) {
-                    promiseReject.execute("spawnEntity() requires position and entityId")
-                } else {
-                    // Optional NBT parameter (args[2])
-                    // TODO: Implement actual entity spawning
-                    promiseReject.execute("World.spawnEntity() not yet implemented")
+                    return@ProxyExecutable createRejectedPromise(context, "spawnEntity() requires position and entityId")
                 }
+                val position = args[0]
+                val entityId = args[1].asString()
+                val nbt = if (args.size > 2) args[2] else null
+                convertFutureToPromise<Value>(context, com.rhett.rhettjs.world.WorldManager.spawnEntity(position, entityId, nbt))
             },
 
-            // Player operations (async)
+            // Player operations (async) - delegate to WorldManager
             "getPlayers" to ProxyExecutable { args ->
-                // TODO: Implement actual player list
-                promiseResolve.execute(emptyList<Any>())
+                convertFutureToPromise<List<Value>>(context, com.rhett.rhettjs.world.WorldManager.getPlayers())
             },
             "getPlayer" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
-                    promiseReject.execute("getPlayer() requires name or UUID")
-                } else {
-                    // TODO: Implement actual player query
-                    promiseResolve.execute(null)
+                    return@ProxyExecutable createRejectedPromise(context, "getPlayer() requires name or UUID")
                 }
+                val nameOrUuid = args[0].asString()
+                convertFutureToPromise<Value?>(context, com.rhett.rhettjs.world.WorldManager.getPlayer(nameOrUuid))
             },
 
-            // Time/Weather operations (async)
+            // Time/Weather operations (async) - delegate to WorldManager
             "getTime" to ProxyExecutable { args ->
-                // Optional dimension parameter (args[0])
-                // TODO: Implement actual time query
-                promiseResolve.execute(0)
+                val dimension = if (args.isNotEmpty()) args[0].asString() else null
+                convertFutureToPromise<Long>(context, com.rhett.rhettjs.world.WorldManager.getTime(dimension))
             },
             "setTime" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
-                    promiseReject.execute("setTime() requires time value")
-                } else {
-                    // Optional dimension parameter (args[1])
-                    // TODO: Implement actual time setting
-                    promiseResolve.execute(null)
+                    return@ProxyExecutable createRejectedPromise(context, "setTime() requires time value")
                 }
+                val time = args[0].asLong()
+                val dimension = if (args.size > 1) args[1].asString() else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.world.WorldManager.setTime(time, dimension))
             },
             "getWeather" to ProxyExecutable { args ->
-                // Optional dimension parameter (args[0])
-                // TODO: Implement actual weather query
-                promiseResolve.execute("clear")
+                val dimension = if (args.isNotEmpty()) args[0].asString() else null
+                convertFutureToPromise<String>(context, com.rhett.rhettjs.world.WorldManager.getWeather(dimension))
             },
             "setWeather" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
-                    promiseReject.execute("setWeather() requires weather type")
-                } else {
-                    // Optional dimension parameter (args[1])
-                    // TODO: Implement actual weather setting
-                    promiseResolve.execute(null)
+                    return@ProxyExecutable createRejectedPromise(context, "setWeather() requires weather type")
+                }
+                val weather = args[0].asString()
+                val dimension = if (args.size > 1) args[1].asString() else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.world.WorldManager.setWeather(weather, dimension))
+            }
+        )
+
+        // Return a custom ProxyObject that dynamically fetches dimensions
+        return object : ProxyObject {
+            override fun getMember(key: String?): Any? {
+                return when (key) {
+                    "dimensions" -> com.rhett.rhettjs.world.WorldManager.getDimensions()
+                    else -> methods[key]
                 }
             }
-        ))
+
+            override fun getMemberKeys(): Any = methods.keys + "dimensions"
+
+            override fun hasMember(key: String?): Boolean {
+                return key == "dimensions" || methods.containsKey(key)
+            }
+
+            override fun putMember(key: String?, value: Value?) {
+                // Read-only proxy
+            }
+        }
+    }
+
+    /**
+     * Convert CompletableFuture to JavaScript Promise.
+     * Helper to bridge Java async operations to JS Promises.
+     *
+     * IMPORTANT: The future completion may happen on a different thread (e.g., server thread),
+     * but GraalVM contexts are single-threaded. We use AsyncScheduler to schedule the
+     * promise resolution back onto the next tick, which runs on a thread that can access
+     * the context safely.
+     */
+    private fun <T> convertFutureToPromise(context: Context, future: CompletableFuture<T>): Value {
+        // Generate unique ID for this promise to avoid collisions
+        val promiseId = "_rjs_promise_${System.nanoTime()}_${(Math.random() * 1000000).toInt()}"
+
+        // Create a Promise and store resolve/reject with unique names
+        val promiseCode = """
+            new Promise((resolve, reject) => {
+                globalThis.${promiseId}_resolve = resolve;
+                globalThis.${promiseId}_reject = reject;
+            })
+        """
+        val promise = context.eval("js", promiseCode)
+
+        // Get resolve/reject functions
+        val resolve = context.getBindings("js").getMember("${promiseId}_resolve")
+        val reject = context.getBindings("js").getMember("${promiseId}_reject")
+
+        // When future completes, schedule the promise resolution on the next tick
+        // This ensures we're not trying to access the GraalVM context from the wrong thread
+        future.whenComplete { result, throwable ->
+            // Schedule promise resolution on next tick to avoid multi-threaded access
+            com.rhett.rhettjs.async.AsyncScheduler.scheduleCallback {
+                // Enter context for multi-threaded access
+                context.enter()
+                try {
+                    if (throwable != null) {
+                        val errorMsg = throwable.cause?.message ?: throwable.message ?: "Unknown error"
+                        ConfigManager.debug("[Promise] Rejecting with error: $errorMsg")
+                        reject.execute(errorMsg)
+                    } else {
+                        ConfigManager.debug("[Promise] Resolving with result: $result")
+                        resolve.execute(result)
+                    }
+                } catch (e: Exception) {
+                    ConfigManager.debug("[Promise] Error during promise resolution: ${e.message}")
+                    try {
+                        reject.execute("Promise resolution error: ${e.message}")
+                    } catch (e2: Exception) {
+                        RhettJSCommon.LOGGER.error("[Promise] Failed to reject promise", e2)
+                    }
+                } finally {
+                    // Clean up globals after promise settles
+                    try {
+                        context.getBindings("js").removeMember("${promiseId}_resolve")
+                        context.getBindings("js").removeMember("${promiseId}_reject")
+                    } catch (e: Exception) {
+                        // Ignore cleanup errors
+                    }
+                    // Leave context for multi-threaded access
+                    context.leave()
+                }
+            }
+        }
+
+        return promise
+    }
+
+    /**
+     * Create a rejected Promise with error message.
+     */
+    private fun createRejectedPromise(context: Context, message: String): Value {
+        return context.eval("js", "Promise.reject(new Error('$message'))")
     }
 
     /**
      * Create Server API proxy for JavaScript.
      * Provides event system (on/off/once), server properties, and broadcast methods.
+     * Delegates to ServerEventManager for actual implementation.
      */
     private fun createServerAPIProxy(): ProxyObject {
-        // Event handler storage (in-memory for now)
-        val eventHandlers = mutableMapOf<String, MutableList<Value>>()
-        val oneTimeHandlers = mutableMapOf<String, MutableList<Value>>()
-
         return ProxyObject.fromMap(mapOf(
-            // Event registration
+            // Event registration - delegate to ServerEventManager
             "on" to ProxyExecutable { args ->
                 if (args.size < 2) {
                     throw IllegalArgumentException("on() requires event name and handler function")
@@ -1128,12 +1258,7 @@ object GraalEngine {
                 val event = args[0].asString()
                 val handler = args[1]
 
-                if (!handler.canExecute()) {
-                    throw IllegalArgumentException("Second argument to on() must be a function")
-                }
-
-                eventHandlers.getOrPut(event) { mutableListOf() }.add(handler)
-                ConfigManager.debug("Registered handler for event: $event")
+                com.rhett.rhettjs.events.ServerEventManager.on(event, handler)
                 null
             },
 
@@ -1144,9 +1269,7 @@ object GraalEngine {
                 val event = args[0].asString()
                 val handler = args[1]
 
-                eventHandlers[event]?.remove(handler)
-                oneTimeHandlers[event]?.remove(handler)
-                ConfigManager.debug("Unregistered handler for event: $event")
+                com.rhett.rhettjs.events.ServerEventManager.off(event, handler)
                 null
             },
 
@@ -1157,29 +1280,23 @@ object GraalEngine {
                 val event = args[0].asString()
                 val handler = args[1]
 
-                if (!handler.canExecute()) {
-                    throw IllegalArgumentException("Second argument to once() must be a function")
-                }
-
-                oneTimeHandlers.getOrPut(event) { mutableListOf() }.add(handler)
-                ConfigManager.debug("Registered one-time handler for event: $event")
+                com.rhett.rhettjs.events.ServerEventManager.once(event, handler)
                 null
             },
 
-            // Server properties (placeholder values)
-            "tps" to 20.0,
-            "players" to emptyList<Any>(),
-            "maxPlayers" to 20,
-            "motd" to "A Minecraft Server",
+            // Server properties - delegate to ServerEventManager for real values
+            "tps" to com.rhett.rhettjs.events.ServerEventManager.getServerTPS(),
+            "players" to com.rhett.rhettjs.events.ServerEventManager.getOnlinePlayers(),
+            "maxPlayers" to com.rhett.rhettjs.events.ServerEventManager.getMaxPlayers(),
+            "motd" to com.rhett.rhettjs.events.ServerEventManager.getMOTD(),
 
-            // Server methods
+            // Server methods - delegate to ServerEventManager
             "broadcast" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
                     throw IllegalArgumentException("broadcast() requires a message")
                 }
                 val message = args[0].asString()
-                // TODO: Implement actual broadcast
-                ConfigManager.debug("Broadcast: $message")
+                com.rhett.rhettjs.events.ServerEventManager.broadcast(message)
                 null
             },
 
@@ -1188,8 +1305,7 @@ object GraalEngine {
                     throw IllegalArgumentException("runCommand() requires a command string")
                 }
                 val command = args[0].asString()
-                // TODO: Implement actual command execution
-                ConfigManager.debug("Run command: $command")
+                com.rhett.rhettjs.events.ServerEventManager.runCommand(command)
                 null
             }
         ))
@@ -1369,10 +1485,15 @@ object GraalEngine {
 
     /**
      * Create Script.argv proxy with argument parsing.
-     * Parses command-line arguments into positional args and flags.
+     * Parses command-line arguments into positional args and flags with values.
+     *
+     * Supports:
+     * - Positional args: arg1 arg2
+     * - Boolean flags: -abc (a=true, b=true, c=true), --verbose (verbose=true)
+     * - Flags with values: -a=1 -b=2, --name=value, --name="quoted value"
      *
      * @param args The raw arguments (can be List or Array)
-     * @return ProxyObject with get(), hasFlag(), getAll(), and raw property
+     * @return ProxyObject with get(index), get(name), hasFlag(), getAll(), and raw property
      */
     private fun createArgvProxy(args: Any): ProxyObject {
         // Convert args to list of strings
@@ -1383,19 +1504,35 @@ object GraalEngine {
             else -> emptyList()
         }
 
-        // Parse arguments into positional args and flags
+        // Parse arguments into positional args and named flags
         val positionalArgs = mutableListOf<String>()
-        val flags = mutableSetOf<String>()
+        val namedFlags = mutableMapOf<String, Any>() // flag name -> value (true or string/number)
 
         for (arg in argsList) {
             when {
                 arg.startsWith("--") -> {
-                    // Long flag: --verbose -> "verbose"
-                    flags.add(arg.substring(2))
+                    // Long flag: --verbose or --name=value
+                    val flagPart = arg.substring(2)
+                    if ('=' in flagPart) {
+                        val (name, value) = flagPart.split('=', limit = 2)
+                        namedFlags[name] = parseValue(value)
+                    } else {
+                        namedFlags[flagPart] = true
+                    }
                 }
                 arg.startsWith("-") && arg.length > 1 -> {
-                    // Short flag: -v -> "v"
-                    flags.add(arg.substring(1))
+                    // Short flag: -v or -abc (multi-char boolean) or -a=value
+                    val flagPart = arg.substring(1)
+                    if ('=' in flagPart) {
+                        // Single flag with value: -a=123
+                        val (name, value) = flagPart.split('=', limit = 2)
+                        namedFlags[name] = parseValue(value)
+                    } else {
+                        // Multi-char boolean flags: -abc -> a=true, b=true, c=true
+                        flagPart.forEach { char ->
+                            namedFlags[char.toString()] = true
+                        }
+                    }
                 }
                 else -> {
                     // Positional argument
@@ -1404,36 +1541,44 @@ object GraalEngine {
             }
         }
 
-        ConfigManager.debug("Parsed argv: ${positionalArgs.size} positional args, ${flags.size} flags")
+        ConfigManager.debug("Parsed argv: ${positionalArgs.size} positional args, ${namedFlags.size} named flags")
 
         // Use pre-compiled undefined value to avoid classloader issues
         val undefined = jsUndefinedValue ?: throw IllegalStateException("JavaScript helpers not initialized")
 
         return ProxyObject.fromMap(mapOf(
-            // get(index) - Get positional argument by index
+            // get(indexOrName) - Get positional argument by index OR named flag by name
             "get" to ProxyExecutable { params ->
                 if (params.isEmpty()) {
-                    throw IllegalArgumentException("get() requires an index argument")
-                }
-                val index = when {
-                    params[0].isNumber -> params[0].asInt()
-                    else -> throw IllegalArgumentException("get() index must be a number")
+                    throw IllegalArgumentException("get() requires an index or name argument")
                 }
 
-                if (index >= 0 && index < positionalArgs.size) {
-                    positionalArgs[index]
-                } else {
-                    undefined // Return JavaScript undefined for out of bounds
+                when {
+                    params[0].isNumber -> {
+                        // Get positional arg by index
+                        val index = params[0].asInt()
+                        if (index >= 0 && index < positionalArgs.size) {
+                            positionalArgs[index]
+                        } else {
+                            undefined
+                        }
+                    }
+                    params[0].isString -> {
+                        // Get named flag by name
+                        val name = params[0].asString()
+                        namedFlags[name] ?: undefined
+                    }
+                    else -> undefined
                 }
             },
 
-            // hasFlag(flag) - Check if a flag exists
+            // hasFlag(flag) - Check if a flag exists (backward compatibility)
             "hasFlag" to ProxyExecutable { params ->
                 if (params.isEmpty()) {
                     throw IllegalArgumentException("hasFlag() requires a flag name")
                 }
                 val flag = params[0].asString()
-                flags.contains(flag)
+                namedFlags.containsKey(flag)
             },
 
             // getAll() - Get all positional arguments as array
@@ -1444,6 +1589,28 @@ object GraalEngine {
             // raw - The original args array (read-only property)
             "raw" to argsList
         ))
+    }
+
+    /**
+     * Parse a flag value string into appropriate type.
+     * - Quoted strings: "hello" or 'hello' -> string
+     * - Numbers: 123 -> int, 3.14 -> double
+     * - Otherwise: string
+     */
+    private fun parseValue(value: String): Any {
+        // Remove quotes if present
+        val trimmed = value.trim()
+        val unquoted = when {
+            (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+            (trimmed.startsWith('\'') && trimmed.endsWith('\'')) ->
+                trimmed.substring(1, trimmed.length - 1)
+            else -> trimmed
+        }
+
+        // Try to parse as number
+        return unquoted.toIntOrNull()
+            ?: unquoted.toDoubleOrNull()
+            ?: unquoted
     }
 
     /**
