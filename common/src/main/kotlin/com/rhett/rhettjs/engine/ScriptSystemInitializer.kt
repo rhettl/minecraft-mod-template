@@ -21,6 +21,8 @@ import kotlin.io.path.exists
  */
 object ScriptSystemInitializer {
 
+    private var initialDatapackLoadComplete = false
+
     /**
      * Initialize startup and server scripts during mod initialization.
      * This runs early, BEFORE command registration and datapack load.
@@ -251,10 +253,17 @@ object ScriptSystemInitializer {
     fun executeServerScripts() {
         val serverScripts = ScriptRegistry.getScripts(ScriptCategory.SERVER)
         if (serverScripts.isNotEmpty()) {
-            RhettJSCommon.LOGGER.info("[RhettJS] Executing ${serverScripts.size} server scripts...")
-
-            // Clear previous command registrations before re-executing
-            GraalEngine.getCommandRegistry().clear()
+            // On initial datapack load, DON'T clear (commands already registered with Brigadier)
+            // On subsequent reloads, DO clear (update command definitions)
+            if (initialDatapackLoadComplete) {
+                RhettJSCommon.LOGGER.info("[RhettJS] Reloading ${serverScripts.size} server scripts...")
+                GraalEngine.getCommandRegistry().clear()
+            } else {
+                RhettJSCommon.LOGGER.info("[RhettJS] Initial datapack load - server scripts already executed during mod init")
+                initialDatapackLoadComplete = true
+                // Don't execute scripts again - they already ran during mod init
+                return
+            }
 
             serverScripts.forEach { script ->
                 try {
