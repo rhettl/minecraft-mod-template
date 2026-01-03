@@ -113,9 +113,11 @@ class RhettJS(modEventBus: IEventBus) {
             ConfigManager.debug("Registered /rjs command")
 
             // Register custom commands that were registered during script initialization
+            ConfigManager.debug("[Commands] RegisterCommandsEvent fired - beginning custom command registration")
             GraalEngine.storeCommandDispatcher(event.dispatcher)
+            ConfigManager.debug("[Commands] Calling registry.registerAll()...")
             GraalEngine.getCommandRegistry().registerAll()
-            ConfigManager.debug("Registered custom commands from server scripts")
+            ConfigManager.debug("[Commands] RegisterCommandsEvent complete")
         }
     }
 

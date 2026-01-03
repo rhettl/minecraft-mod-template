@@ -47,6 +47,7 @@ class CustomCommandRegistry {
      */
     fun storeCommand(name: String, data: Map<String, Any?>) {
         commands[name] = data.toMutableMap()
+        ConfigManager.debug("[Commands] Stored command: /$name (executor=${data["executor"] != null}, args=${(data["arguments"] as? List<*>)?.size ?: 0}, permission=${data["permission"] != null})")
     }
 
     /**
@@ -66,7 +67,7 @@ class CustomCommandRegistry {
     fun storeDispatcher(dispatcher: CommandDispatcher<CommandSourceStack>, context: Context) {
         this.dispatcher = dispatcher
         this.context = context
-        ConfigManager.debug("Stored dispatcher and context for custom commands")
+        ConfigManager.debug("[Commands] Stored dispatcher and context for custom commands")
     }
 
     /**
@@ -77,33 +78,45 @@ class CustomCommandRegistry {
      */
     fun registerAll() {
         val disp = dispatcher ?: run {
-            ConfigManager.debug("Cannot register commands: dispatcher not stored")
+            ConfigManager.debug("[Commands] Cannot register commands: dispatcher not stored")
             return
         }
         val ctx = context ?: run {
-            ConfigManager.debug("Cannot register commands: context not stored")
+            ConfigManager.debug("[Commands] Cannot register commands: context not stored")
             return
         }
+
+        ConfigManager.debug("[Commands] registerAll() called with ${commands.size} commands in registry")
+        ConfigManager.debug("[Commands] Command list: ${commands.keys.joinToString(", ") { "/$it" }}")
+
+        var successCount = 0
+        var skipCount = 0
+        var failCount = 0
 
         commands.forEach { (name, data) ->
             // Skip empty/removed commands
             if (data.isEmpty() || data["executor"] == null) {
-                ConfigManager.debug("Skipping command: /$name (no executor)")
+                ConfigManager.debug("[Commands] Skipping command: /$name (no executor)")
+                skipCount++
                 return@forEach
             }
 
             try {
                 validateCommand(data)
+                ConfigManager.debug("[Commands] Building Brigadier command for: /$name")
                 val command = buildCommand(name, data, ctx)
+                ConfigManager.debug("[Commands] Registering with dispatcher: /$name")
                 disp.register(command)
-                ConfigManager.debug("Registered command: /$name")
+                ConfigManager.debug("[Commands] ✓ Successfully registered: /$name")
+                successCount++
             } catch (e: Exception) {
-                ConfigManager.debug("Failed to register command /$name: ${e.message}")
+                ConfigManager.debug("[Commands] ✗ Failed to register /$name: ${e.message}")
                 e.printStackTrace()
+                failCount++
             }
         }
 
-        ConfigManager.debug("Registered ${commands.size} custom commands")
+        ConfigManager.debug("[Commands] Registration complete: $successCount successful, $skipCount skipped, $failCount failed")
     }
 
     /**
@@ -175,9 +188,18 @@ class CustomCommandRegistry {
         if (arguments.isEmpty()) {
             // No arguments - executor looks up dynamically for /reload support
             commandBuilder.executes { brigadierContext ->
+                ConfigManager.debug("[Commands] Executing command: /$name (no args)")
                 val commandData = getCommand(name)
-                val executor = commandData?.get("executor") as? Value
-                    ?: throw IllegalStateException("Command $name has no executor")
+                if (commandData == null) {
+                    ConfigManager.debug("[Commands] ✗ Command /$name not found in registry!")
+                    throw IllegalStateException("Command $name not found in registry")
+                }
+                val executor = commandData["executor"] as? Value
+                if (executor == null) {
+                    ConfigManager.debug("[Commands] ✗ Command /$name has no executor!")
+                    throw IllegalStateException("Command $name has no executor")
+                }
+                ConfigManager.debug("[Commands] Found executor for /$name, calling handler...")
                 executeHandler(executor, brigadierContext, emptyList(), context)
             }
         } else {
@@ -203,9 +225,18 @@ class CustomCommandRegistry {
             mapArgumentType(arguments.last()["type"]!!)
         ).executes { brigadierContext ->
             // Look up executor dynamically from registry (supports /reload)
+            ConfigManager.debug("[Commands] Executing command: /$commandName (${arguments.size} args)")
             val commandData = getCommand(commandName)
-            val executor = commandData?.get("executor") as? Value
-                ?: throw IllegalStateException("Command $commandName has no executor")
+            if (commandData == null) {
+                ConfigManager.debug("[Commands] ✗ Command /$commandName not found in registry!")
+                throw IllegalStateException("Command $commandName not found in registry")
+            }
+            val executor = commandData["executor"] as? Value
+            if (executor == null) {
+                ConfigManager.debug("[Commands] ✗ Command /$commandName has no executor!")
+                throw IllegalStateException("Command $commandName has no executor")
+            }
+            ConfigManager.debug("[Commands] Found executor for /$commandName, calling handler...")
             executeHandler(executor, brigadierContext, arguments, context)
         }
 
@@ -259,6 +290,8 @@ class CustomCommandRegistry {
         graalContext: Context
     ): Int {
         try {
+            ConfigManager.debug("[Commands] executeHandler called for: ${brigadierContext.input}")
+
             // Extract arguments
             val argsObject = extractArguments(brigadierContext, arguments, graalContext)
 
@@ -274,19 +307,22 @@ class CustomCommandRegistry {
             ))
 
             // Execute handler
+            ConfigManager.debug("[Commands] Calling executor.execute() with event object...")
             val result = executor.execute(graalContext.asValue(event))
+            ConfigManager.debug("[Commands] Executor returned, checking result...")
 
             // Handle async (Promise) results
             if (result.canExecute() && result.hasMember("then")) {
                 // It's a Promise - we can't wait for it in Brigadier
                 // Just return success and let it complete async
-                ConfigManager.debug("Command returned a Promise - executing asynchronously")
+                ConfigManager.debug("[Commands] Command returned a Promise - executing asynchronously")
                 return 1
             }
 
+            ConfigManager.debug("[Commands] ✓ Command executed successfully")
             return 1 // Success
         } catch (e: Exception) {
-            ConfigManager.debug("Command execution error: ${e.message}")
+            ConfigManager.debug("[Commands] ✗ Command execution error: ${e.message}")
             e.printStackTrace()
             return 0 // Failure
         }
@@ -381,7 +417,10 @@ class CustomCommandRegistry {
      * Clear all stored commands.
      */
     fun clear() {
+        val count = commands.size
+        val names = commands.keys.joinToString(", ") { "/$it" }
         commands.clear()
+        ConfigManager.debug("[Commands] Cleared $count commands from registry: $names")
     }
 
     /**

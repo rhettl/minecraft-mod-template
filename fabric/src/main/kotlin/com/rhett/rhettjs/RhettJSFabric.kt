@@ -61,9 +61,11 @@ class RhettJSFabric : ModInitializer {
             ConfigManager.debug("Registered /rjs command")
 
             // Register custom commands that were registered during script initialization
+            ConfigManager.debug("[Commands] CommandRegistrationCallback fired - beginning custom command registration")
             GraalEngine.storeCommandDispatcher(dispatcher)
+            ConfigManager.debug("[Commands] Calling registry.registerAll()...")
             GraalEngine.getCommandRegistry().registerAll()
-            ConfigManager.debug("Registered custom commands from server scripts")
+            ConfigManager.debug("[Commands] CommandRegistrationCallback complete")
         }
 
         // Register tick handler for schedule() processing
