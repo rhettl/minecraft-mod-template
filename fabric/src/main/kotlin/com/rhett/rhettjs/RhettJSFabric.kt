@@ -56,13 +56,13 @@ class RhettJSFabric : ModInitializer {
         ConfigManager.debug("Registered block event handlers")
 
         // Register commands
-        CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
+        CommandRegistrationCallback.EVENT.register { dispatcher, registryAccess, environment ->
             RJSCommand.register(dispatcher)
             ConfigManager.debug("Registered /rjs command")
 
             // Register custom commands that were registered during script initialization
             ConfigManager.debug("[Commands] CommandRegistrationCallback fired - beginning custom command registration")
-            GraalEngine.storeCommandDispatcher(dispatcher)
+            GraalEngine.storeCommandDispatcher(dispatcher, net.minecraft.commands.Commands.createValidationContext(registryAccess))
             ConfigManager.debug("[Commands] Calling registry.registerAll()...")
             GraalEngine.getCommandRegistry().registerAll()
             ConfigManager.debug("[Commands] CommandRegistrationCallback complete")

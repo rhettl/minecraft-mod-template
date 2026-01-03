@@ -90,11 +90,15 @@ object GraalEngine {
      * Called during command registration event (before server/startup scripts run).
      *
      * @param dispatcher The Minecraft command dispatcher
+     * @param buildContext The command build context for item/block arguments
      */
-    fun storeCommandDispatcher(dispatcher: com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>) {
+    fun storeCommandDispatcher(
+        dispatcher: com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>,
+        buildContext: net.minecraft.commands.CommandBuildContext
+    ) {
         val context = getOrCreateContext()
-        commandRegistry.storeDispatcher(dispatcher, context)
-        ConfigManager.debug("Stored command dispatcher and GraalVM context")
+        commandRegistry.storeDispatcher(dispatcher, context, buildContext)
+        ConfigManager.debug("Stored command dispatcher, GraalVM context, and build context")
     }
 
     /**

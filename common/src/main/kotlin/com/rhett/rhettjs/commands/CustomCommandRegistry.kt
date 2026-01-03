@@ -38,6 +38,7 @@ class CustomCommandRegistry {
     private val commands = mutableMapOf<String, MutableMap<String, Any?>>()
     private var dispatcher: CommandDispatcher<CommandSourceStack>? = null
     private var context: Context? = null
+    private var commandBuildContext: net.minecraft.commands.CommandBuildContext? = null
 
     /**
      * Store a command from JavaScript.
@@ -63,11 +64,17 @@ class CustomCommandRegistry {
      *
      * @param dispatcher The Minecraft command dispatcher
      * @param context The GraalVM context for executing JS handlers
+     * @param buildContext The command build context for item/block arguments
      */
-    fun storeDispatcher(dispatcher: CommandDispatcher<CommandSourceStack>, context: Context) {
+    fun storeDispatcher(
+        dispatcher: CommandDispatcher<CommandSourceStack>,
+        context: Context,
+        buildContext: net.minecraft.commands.CommandBuildContext
+    ) {
         this.dispatcher = dispatcher
         this.context = context
-        ConfigManager.debug("[Commands] Stored dispatcher and context for custom commands")
+        this.commandBuildContext = buildContext
+        ConfigManager.debug("[Commands] Stored dispatcher, context, and build context for custom commands")
     }
 
     /**
@@ -271,8 +278,16 @@ class CustomCommandRegistry {
             "int" -> IntegerArgumentType.integer()
             "float" -> FloatArgumentType.floatArg()
             "player" -> EntityArgument.player()
-            "item" -> ItemArgument.item(null) // TODO: Get proper command context
-            "block" -> BlockStateArgument.block(null) // TODO: Get proper command context
+            "item" -> {
+                val buildCtx = commandBuildContext
+                    ?: throw IllegalStateException("CommandBuildContext not available for item argument type")
+                ItemArgument.item(buildCtx)
+            }
+            "block" -> {
+                val buildCtx = commandBuildContext
+                    ?: throw IllegalStateException("CommandBuildContext not available for block argument type")
+                BlockStateArgument.block(buildCtx)
+            }
             "entity" -> EntityArgument.entity()
             else -> throw IllegalArgumentException("Unknown argument type: $type")
         }
