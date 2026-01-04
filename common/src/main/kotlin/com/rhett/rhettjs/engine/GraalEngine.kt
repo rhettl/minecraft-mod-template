@@ -166,17 +166,38 @@ object GraalEngine {
      * Get or create the shared GraalVM context.
      * Creates the context on first use, then reuses it for all subsequent scripts.
      * Re-initializes helpers if they were cleared by reset().
+     *
+     * Internal visibility for testing: APITypeValidationTest introspects bindings to validate types.
      */
-    private fun getOrCreateContext(): Context {
+    internal fun getOrCreateContext(): Context {
         val ctx = sharedContext ?: synchronized(this) {
             sharedContext ?: createContext().also { newCtx ->
                 sharedContext = newCtx
                 initializeJSHelpers(newCtx)
+
+                // Inject core APIs that should always be available
+                val bindings = newCtx.getBindings("js")
+
+                // Console API
+                val console = createConsoleAPI()
+                bindings.putMember("console", console)
+
+                // Runtime API
+                val runtime = createRuntimeAPI(newCtx)
+                bindings.putMember("Runtime", runtime)
+
+                // wait() function
+                val waitFn = createWaitFunction(newCtx)
+                bindings.putMember("wait", waitFn)
+
+                // Inject built-in API modules (World, Structure, Store, NBT, Server, Commands)
+                injectBuiltinModules(bindings)
+
                 // Set context reference in managers
                 com.rhett.rhettjs.events.ServerEventManager.setContext(newCtx)
                 com.rhett.rhettjs.world.WorldManager.setContext(newCtx)
                 com.rhett.rhettjs.structure.StructureManager.setContext(newCtx)
-                ConfigManager.debug("Created shared GraalVM context with pre-compiled helpers")
+                ConfigManager.debug("Created shared GraalVM context with pre-compiled helpers and built-in APIs")
             }
         }
 
@@ -380,23 +401,8 @@ object GraalEngine {
     ) {
         val bindings = context.getBindings("js")
 
-        // Inject Console API
-        val console = createConsoleAPI()
-        bindings.putMember("console", console)
-        ConfigManager.debug("Injected Console API")
-
-        // Inject Runtime API
-        val runtime = createRuntimeAPI(context)
-        bindings.putMember("Runtime", runtime)
-        ConfigManager.debug("Injected Runtime API")
-
-        // Inject wait() function for async delays
-        val waitFn = createWaitFunction(context)
-        bindings.putMember("wait", waitFn)
-        ConfigManager.debug("Injected wait() function")
-
-        // Inject built-in modules for import (World, Structure, Store, NBT)
-        injectBuiltinModules(bindings)
+        // Console, Runtime, wait(), and built-in modules are already injected
+        // during context initialization in getOrCreateContext()
 
         // Inject Script.* for utility scripts (or remove if not utility)
         if (category == ScriptCategory.UTILITY) {
@@ -1075,14 +1081,6 @@ object GraalEngine {
                 }
                 val name = args[0].asString()
                 convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.deleteLarge(name))
-            },
-
-            // TODO: Implement load() and save() for direct structure data access
-            "load" to ProxyExecutable { args ->
-                createRejectedPromise(context, "Structure.load() not yet implemented - use capture/place instead")
-            },
-            "save" to ProxyExecutable { args ->
-                createRejectedPromise(context, "Structure.save() not yet implemented - use capture/place instead")
             }
         ))
     }
@@ -1197,7 +1195,7 @@ object GraalEngine {
                 }
             }
 
-            override fun getMemberKeys(): Any = methods.keys + "dimensions"
+            override fun getMemberKeys(): Any = (methods.keys + "dimensions").toTypedArray()
 
             override fun hasMember(key: String?): Boolean {
                 return key == "dimensions" || methods.containsKey(key)

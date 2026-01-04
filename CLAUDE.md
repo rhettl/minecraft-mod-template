@@ -17,6 +17,32 @@ Before writing new code to implement common functionality, ask if there's an exi
 - **When writing/fixing implementation code**: Do not modify existing tests. If tests fail, fix the code to match the test specification. If you believe a test is wrong, stop and explain why before touching it.
 - **When explicitly asked to write tests**: You may create and modify tests freely.
 
+**Test-Driven Development for APIs**:
+When adding or modifying JavaScript APIs, follow this workflow:
+
+1. **Update TypeScript definitions** (`common/src/main/resources/rhettjs-types/rhettjs.d.ts`)
+   - Add/update method signatures with JSDoc comments
+   - Define parameter and return types
+   - Include usage examples
+
+2. **Update validation test** (`common/src/test/kotlin/.../APITypeValidationTest.kt`)
+   - Add expected method names to `getRuntimeMethods()`
+   - Test will fail if .d.ts doesn't match expected methods
+
+3. **Implement runtime binding** (`GraalEngine.kt`)
+   - Create/update `createXAPIProxy()` methods
+   - Bind Kotlin implementations to JavaScript API surface
+
+4. **Run tests** - `./gradlew test`
+   - Type validation test ensures .d.ts matches runtime
+   - Integration tests verify functionality
+
+This TDD approach ensures:
+- TypeScript definitions stay in sync with runtime
+- APIs are designed before implementation
+- No method drift between types and code
+- 100% API coverage in type definitions (excluding `_` prefixed private methods)
+
 ### Layered Architecture
 Isolate external access (registries, world state, APIs, file I/O) into dedicated service/adapter files. Business logic should receive pure data or internal models, not registry handles or Minecraft types directly. Commands should contain only orchestration—parse input, call business logic, format output—never operational logic. This enables testability and prevents duplication of external access patterns.
 
@@ -25,6 +51,33 @@ Isolate external access (registries, world state, APIs, file I/O) into dedicated
 - **Services/Adapters**: Handle registry access, world queries, external APIs
 - **Business Logic**: Pure functions operating on models
 - **Commands/Controllers**: Thin orchestration layer only
+
+### Anti-Corruption Layer (JavaScript APIs)
+**CRITICAL**: RhettJS exposes a JavaScript scripting API to Minecraft. All JavaScript APIs MUST follow the anti-corruption pattern:
+
+- **No Java objects exposed** - Convert all Minecraft types to pure JavaScript primitives, objects, or arrays
+- **No `.toString()` pollution** - Everything must be `console.log()`-able without `Runtime.inspect()`
+- **Properties for data** - Use properties (`player.name`), not getters
+- **Methods for actions** - Use methods only for side effects (`player.teleport(pos)`)
+- **Consistent shapes** - Same data types always use same structure across all APIs
+- **Async for I/O** - File/world operations return Promises
+- **Sync for immediate** - In-memory operations are synchronous
+
+**Example violation**:
+```javascript
+// BAD - Exposes Java Player object
+const player = World.getPlayer("Steve");
+console.log(player);  // [JavaObject Player@abc123]
+```
+
+**Correct implementation**:
+```javascript
+// GOOD - Pure JavaScript object
+const player = World.getPlayer("Steve");
+console.log(player);  // { name: "Steve", uuid: "...", health: 20, ... }
+```
+
+All adapters (PlayerAdapter, BlockAdapter, etc.) exist to enforce this boundary.
 
 ## Directory Map
 
@@ -49,6 +102,7 @@ When creating documentation or notes, use the appropriate directory. Do not litt
 ## Tech Stack
 
 - **Language**: Kotlin (not Java)
+- **JavaScript Engine**: GraalVM JS 24.1.1 (ES2022, async/await, ES6 modules)
 - **Build**: Gradle with Kotlin DSL (`.gradle.kts` files)
 - **Multi-loader**: Architectury (Fabric + NeoForge from single codebase)
 - **Multi-version**: Stonecutter (version-specific code via preprocessor comments)
@@ -130,6 +184,65 @@ User uses IDE runConfiguration now, but the below still exists.
 - **Stonecutter siblings**: Use `stonecutter.node.sibling("common")` to reference common project, not `project(":common")`
 - **Mixin configs**: Named `{modid}.mixins.json` in common, `{modid}-{loader}.mixins.json` in loader dirs
 - **No Architectury API**: This template uses Architectury Plugin only (not the runtime API)
+
+## TypeScript Definitions & IDE Support
+
+RhettJS provides TypeScript definitions for all JavaScript APIs to enable IDE autocomplete and type checking.
+
+**Location**: `common/src/main/resources/rhettjs-types/rhettjs.d.ts`
+
+**Auto-extraction**: Type definitions are automatically extracted from the mod JAR to `<minecraft>/rjs/__types/` on first load via `FilesystemInitializer`.
+
+**Validation**: `APITypeValidationTest.kt` ensures runtime API methods match TypeScript definitions:
+- Parses .d.ts file to extract declared methods
+- Compares against expected runtime methods (maintained in test)
+- Fails build if types drift from runtime
+- 100% strict matching (excluding `_` prefixed private methods)
+
+**Workflow**:
+1. Add new API method to .d.ts with JSDoc
+2. Implement method in GraalEngine ProxyObject
+3. Run `./gradlew test` - **automatically validates** .d.ts matches runtime
+4. Copy updated .d.ts to `rjs-test-scripts/__types/` for testing
+
+**How validation works**:
+- Test introspects actual GraalVM bindings (via `GraalEngine.getOrCreateContext()`)
+- Extracts actual method names from runtime (`apiObject.memberKeys`)
+- Compares against .d.ts (parsed via regex)
+- Fails if mismatch - **no manual list maintenance required**
+
+**Current status** (2026-01-03):
+- ✅ **ALL APIs validated automatically** - Runtime, Structure, World, Store, Commands, Server, NBT
+- ✅ Test successfully caught and fixed real drift:
+  - Removed unimplemented `Structure.load()` and `Structure.save()`
+  - Removed undocumented `Runtime.inspect()`
+  - Added missing `World.replace()`, `World.getEntities()`, `World.spawnEntity()`
+- Note: Properties (like `Server.tps`, `World.dimensions`) are automatically excluded from validation
+
+**IDE Setup**:
+- VSCode: Auto-discovered or use `/// <reference path="../__types/rhettjs.d.ts" />`
+- IntelliJ: Right-click `__types/` → Mark Directory As → Resource Root
+
+## Session Documentation
+
+When working on significant features or investigations, document your work in `dev-docs/`:
+
+**Active docs** (keep updated):
+- `API-DESIGN.md` - JavaScript API specifications
+- `GRAAL-MIGRATION-STATUS.md` - Migration status and completed phases
+- `CURRENT_SPEC.md` - Comprehensive implementation specification (read by future Claude sessions)
+- `INGAME-TESTING.md` - Testing mode documentation
+- `MODULE-IMPORTS.md` - ES6 module resolution details
+- `CUSTOM-MODULE-RESOLUTION.md` - Virtual module system documentation
+
+**Temporary docs** (delete when obsolete):
+- Investigation documents (prefix with date: `2026-01-03-feature-name.md`)
+- Migration/refactor plans (delete after completion)
+- Session summaries (delete after merging insights into active docs)
+
+**Important**: `dev-docs/` is gitignored. Keep only relevant, current documentation. Delete obsolete files regularly.
+
+**For future Claude sessions**: Read `dev-docs/CURRENT_SPEC.md` for comprehensive project context.
 
 ## Files to Update for New Mod
 

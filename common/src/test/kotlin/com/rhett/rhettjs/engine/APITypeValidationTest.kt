@@ -85,48 +85,50 @@ class APITypeValidationTest {
     }
 
     /**
-     * Get expected runtime API methods based on GraalEngine implementation.
-     * This list must be manually kept in sync with GraalEngine's createXAPIProxy() methods.
-     * The test validates that .d.ts matches this expected surface.
+     * Get actual runtime API methods by introspecting GraalEngine bindings.
+     * This ACTUALLY checks what methods exist at runtime, not a manually maintained list.
+     *
+     * Properties (like Server.tps, World.dimensions) are excluded since they're declared differently in .d.ts.
      *
      * @param apiName The API name (e.g., "Structure", "World")
-     * @return Sorted list of method names that should exist in runtime
+     * @return Sorted list of method names that exist in the actual runtime
      */
     private fun getRuntimeMethods(apiName: String): List<String> {
-        return when (apiName) {
-            "Structure" -> listOf(
-                "exists", "list", "delete",
-                "capture", "place",
-                "captureLarge", "placeLarge", "getSize", "listLarge", "deleteLarge"
-            )
-            "World" -> listOf(
-                "getBlock", "setBlock", "fill",
-                "getPlayers", "getPlayer",
-                "getTime", "setTime",
-                "getWeather", "setWeather"
-                // Note: "dimensions" is a property, not a method
-            )
-            "Commands" -> listOf(
-                "register", "unregister"
-            )
-            "Server" -> listOf(
-                "on", "once", "off",
-                "broadcast", "runCommand"
-                // Note: "tps", "players", "maxPlayers", "motd" are properties
-            )
-            "Store" -> listOf(
-                "namespace", "namespaces", "clearAll", "size"
-            )
-            "NBT" -> listOf(
-                "compound", "list", "string", "int", "double", "byte",
-                "get", "set", "has", "delete", "merge"
-            )
-            "Runtime" -> listOf(
-                "exit", "setScriptTimeout", "inspect"
-                // Note: "env" is a property
-            )
+        // Get actual GraalVM context and introspect bindings
+        val context = GraalEngine.getOrCreateContext()
+        val bindings = context.getBindings("js")
+
+        // Map API name to builtin binding name
+        // Runtime is bound directly as "Runtime", others as "__builtin_<Name>"
+        val builtinName = when (apiName) {
+            "Runtime" -> "Runtime"
+            "Console" -> "console"  // Special case: lowercase
+            "Structure", "World", "Commands", "Server", "Store", "NBT" -> "__builtin_$apiName"
             else -> throw IllegalArgumentException("Unknown API: $apiName")
-        }.sorted()
+        }
+
+        // Get the API object from bindings
+        val apiObject = bindings.getMember(builtinName)
+            ?: throw IllegalStateException("API not found in bindings: $builtinName")
+
+        // Get member keys from the Value object
+        // memberKeys returns a Set<String> which we convert to List
+        val memberKeys = apiObject.memberKeys.toList()
+
+        // Known properties to exclude (declared as properties in .d.ts, not methods)
+        val knownProperties = setOf(
+            "env",          // Runtime.env
+            "dimensions",   // World.dimensions
+            "tps", "players", "maxPlayers", "motd",  // Server properties
+            "raw"           // Script.argv.raw
+        )
+
+        // Filter and return
+        return memberKeys
+            .filter { !it.startsWith("_") }      // Exclude private (underscore prefix)
+            .filter { it !in knownProperties }   // Exclude known properties
+            .sorted()
+            .toList()
     }
 
     private fun createTempScript(content: String): Path {
