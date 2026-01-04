@@ -1038,6 +1038,45 @@ object GraalEngine {
                 convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.place(position, name, options))
             },
 
+            // Large structure operations (async)
+            "captureLarge" to ProxyExecutable { args ->
+                if (args.size < 3) {
+                    return@ProxyExecutable createRejectedPromise(context, "captureLarge() requires pos1, pos2, and name")
+                }
+                val pos1 = args[0]
+                val pos2 = args[1]
+                val name = args[2].asString()
+                val options = if (args.size > 3) args[3] else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.captureLarge(pos1, pos2, name, options))
+            },
+            "placeLarge" to ProxyExecutable { args ->
+                if (args.size < 2) {
+                    return@ProxyExecutable createRejectedPromise(context, "placeLarge() requires position and name")
+                }
+                val position = args[0]
+                val name = args[1].asString()
+                val options = if (args.size > 2) args[2] else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.placeLarge(position, name, options))
+            },
+            "getSize" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "getSize() requires a structure name")
+                }
+                val name = args[0].asString()
+                convertFutureToPromise<Map<String, Int>>(context, com.rhett.rhettjs.structure.StructureManager.getSize(name))
+            },
+            "listLarge" to ProxyExecutable { args ->
+                val namespace = if (args.isNotEmpty()) args[0].asString() else null
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.listLarge(namespace))
+            },
+            "deleteLarge" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "deleteLarge() requires a structure name")
+                }
+                val name = args[0].asString()
+                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.deleteLarge(name))
+            },
+
             // TODO: Implement load() and save() for direct structure data access
             "load" to ProxyExecutable { args ->
                 createRejectedPromise(context, "Structure.load() not yet implemented - use capture/place instead")

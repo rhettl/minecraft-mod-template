@@ -36,10 +36,13 @@ object ScriptSystemInitializer {
         val scriptsDir = getScriptsDirectory(null)
         ConfigManager.debug("Script directory: $scriptsDir")
 
+        // Initialize filesystem structure (creates directories + extracts type definitions)
+        com.rhett.rhettjs.config.FilesystemInitializer.initialize(scriptsDir)
+
         // Set scripts directory for module resolution
         GraalEngine.setScriptsDirectory(scriptsDir)
 
-        // Ensure script directories exist
+        // Ensure script directories exist (legacy - now handled by FilesystemInitializer)
         createDirectories(scriptsDir)
 
         // Scan for scripts

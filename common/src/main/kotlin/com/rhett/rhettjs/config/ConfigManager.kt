@@ -69,20 +69,30 @@ object ConfigManager {
 
     /**
      * Create default configuration file.
+     * Extracts from bundled resources in mod JAR.
      */
     private fun createDefault() {
         try {
             Files.createDirectories(configPath.parent)
 
-            // Create default config
-            config = RhettJSConfig(enabled = true, debug_logging = true)
+            // Extract default config from JAR resources
+            val resourceContent = javaClass.getResourceAsStream("/rhettjs-defaults/rhettjs.json")
+                ?.bufferedReader()
+                ?.readText()
 
-            // Write with pretty printing
-            val content = gson.toJson(config)
-            configPath.writeText(content)
-
-            RhettJSCommon.LOGGER.info("[RhettJS] Created default config at ${configPath.fileName}")
-            RhettJSCommon.LOGGER.info("[RhettJS] Config file: $configPath")
+            if (resourceContent != null) {
+                configPath.writeText(resourceContent)
+                config = gson.fromJson(resourceContent, RhettJSConfig::class.java)
+                RhettJSCommon.LOGGER.info("[RhettJS] Created default config at ${configPath.fileName}")
+                RhettJSCommon.LOGGER.info("[RhettJS] Config file: $configPath")
+            } else {
+                // Fallback to inline creation if resource not found
+                RhettJSCommon.LOGGER.warn("[RhettJS] Default config resource not found, creating inline")
+                config = RhettJSConfig(enabled = true, debug_logging = true)
+                val content = gson.toJson(config)
+                configPath.writeText(content)
+                RhettJSCommon.LOGGER.info("[RhettJS] Created default config at ${configPath.fileName}")
+            }
         } catch (e: Exception) {
             RhettJSCommon.LOGGER.error("[RhettJS] Failed to create default config", e)
         }

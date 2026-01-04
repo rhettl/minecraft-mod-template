@@ -66,6 +66,8 @@ When creating documentation or notes, use the appropriate directory. Do not litt
 
 ## Building
 
+User uses IDE runConfiguration now, but the below still exists.
+
 ```bash
 ./gradlew build          # Build all platforms
 ./build.sh               # Build and deploy to local Minecraft instances
@@ -75,7 +77,7 @@ When creating documentation or notes, use the appropriate directory. Do not litt
 
 - **gh CLI**: GitHub CLI is available for creating PRs, issues, releases, etc.
 - **gradlew**: Gradle wrapper for building
-- **build.sh**: Build and deploy to local Minecraft instances
+- **build.sh**: Build and deploy to local Minecraft instances, only used for external prod testing instead of dev testing.
 - **tag-release.sh**: Create version tags and push
 
 ## Key Concepts
