@@ -57,3 +57,7 @@ build-test*.sh
 
 .aider*
 /KubeJS/
+
+# Test structures and scripts (for local testing only)
+structures/
+reset-structures.sh
