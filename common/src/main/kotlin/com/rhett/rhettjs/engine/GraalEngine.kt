@@ -248,7 +248,7 @@ object GraalEngine {
             })
         """.trimIndent())
 
-        // NBT.delete() helper
+        // NBT.remove() helper
         jsNBTDeleteHelper = context.eval("js", """
             (function(obj, path) {
                 const keys = path.split('.').flatMap(k => {
@@ -725,15 +725,15 @@ object GraalEngine {
                     false
                 }
             },
-            "delete" to ProxyExecutable { args ->
-                if (args.size < 2) throw IllegalArgumentException("delete() requires nbt and path")
+            "remove" to ProxyExecutable { args ->
+                if (args.size < 2) throw IllegalArgumentException("remove() requires nbt and path")
                 try {
                     val path = if (args[1].isString) args[1].asString() else args[1].toString()
                     // Work with GraalVM Values directly to preserve JS object types
                     deleteNBTValueJS(args[0], path)
                 } catch (e: Exception) {
-                    ConfigManager.debug("NBT.delete error: ${e.message}")
-                    throw IllegalArgumentException("NBT.delete requires (nbt, path): ${e.message}")
+                    ConfigManager.debug("NBT.remove error: ${e.message}")
+                    throw IllegalArgumentException("NBT.remove requires (nbt, path): ${e.message}")
                 }
             },
             "merge" to ProxyExecutable { args ->
@@ -1015,12 +1015,12 @@ object GraalEngine {
                 val namespace = if (args.isNotEmpty()) args[0].asString() else null
                 convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.list(namespace))
             },
-            "delete" to ProxyExecutable { args ->
+            "remove" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
-                    return@ProxyExecutable createRejectedPromise(context, "delete() requires a structure name")
+                    return@ProxyExecutable createRejectedPromise(context, "remove() requires a structure name")
                 }
                 val name = args[0].asString()
-                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.delete(name))
+                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.remove(name))
             },
 
             // Structure operations (async) - delegate to StructureManager
@@ -1075,12 +1075,84 @@ object GraalEngine {
                 val namespace = if (args.isNotEmpty()) args[0].asString() else null
                 convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.listLarge(namespace))
             },
-            "deleteLarge" to ProxyExecutable { args ->
+            "removeLarge" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
-                    return@ProxyExecutable createRejectedPromise(context, "deleteLarge() requires a structure name")
+                    return@ProxyExecutable createRejectedPromise(context, "removeLarge() requires a structure name")
                 }
                 val name = args[0].asString()
-                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.deleteLarge(name))
+                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.removeLarge(name))
+            },
+
+            // Block analysis and replacement operations (async)
+            "blocksList" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "blocksList() requires a structure name")
+                }
+                val name = args[0].asString()
+                convertFutureToPromise<Map<String, Int>>(context, com.rhett.rhettjs.structure.StructureManager.blocksList(name))
+            },
+            "blocksNamespaces" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "blocksNamespaces() requires a structure name")
+                }
+                val name = args[0].asString()
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.blocksNamespaces(name))
+            },
+            "blocksReplace" to ProxyExecutable { args ->
+                if (args.size < 2) {
+                    return@ProxyExecutable createRejectedPromise(context, "blocksReplace() requires structure name and replacement map")
+                }
+                val name = args[0].asString()
+                val replacementMap = convertGraalValueToKotlin(args[1]) as? Map<*, *>
+                    ?: return@ProxyExecutable createRejectedPromise(context, "replacementMap must be an object")
+
+                @Suppress("UNCHECKED_CAST")
+                val typedMap = replacementMap as Map<String, String>
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.blocksReplace(name, typedMap))
+            },
+            "blocksReplaceLarge" to ProxyExecutable { args ->
+                if (args.size < 2) {
+                    return@ProxyExecutable createRejectedPromise(context, "blocksReplaceLarge() requires structure name and replacement map")
+                }
+                val name = args[0].asString()
+                val replacementMap = convertGraalValueToKotlin(args[1]) as? Map<*, *>
+                    ?: return@ProxyExecutable createRejectedPromise(context, "replacementMap must be an object")
+
+                @Suppress("UNCHECKED_CAST")
+                val typedMap = replacementMap as Map<String, String>
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.blocksReplaceLarge(name, typedMap))
+            },
+
+            // Backup and restore operations (async)
+            "listBackups" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "listBackups() requires a structure name")
+                }
+                val name = args[0].asString()
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.listBackups(name))
+            },
+            "restoreBackup" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "restoreBackup() requires a structure name")
+                }
+                val name = args[0].asString()
+                val timestamp = if (args.size > 1 && !args[1].isNull) args[1].asString() else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.restoreBackup(name, timestamp))
+            },
+            "listBackupsLarge" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "listBackupsLarge() requires a structure name")
+                }
+                val name = args[0].asString()
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.listBackupsLarge(name))
+            },
+            "restoreBackupLarge" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "restoreBackupLarge() requires a structure name")
+                }
+                val name = args[0].asString()
+                val timestamp = if (args.size > 1 && !args[1].isNull) args[1].asString() else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.restoreBackupLarge(name, timestamp))
             }
         ))
     }
@@ -1101,6 +1173,12 @@ object GraalEngine {
                     return@ProxyExecutable createRejectedPromise(context, "getBlock() requires a position")
                 }
                 convertFutureToPromise<Value>(context, com.rhett.rhettjs.world.WorldManager.getBlock(args[0]))
+            },
+            "getBlockEntity" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "getBlockEntity() requires a position")
+                }
+                convertFutureToPromise<Value?>(context, com.rhett.rhettjs.world.WorldManager.getBlockEntity(args[0]))
             },
             "setBlock" to ProxyExecutable { args ->
                 if (args.size < 2) {
@@ -1247,7 +1325,10 @@ object GraalEngine {
                         reject.execute(errorMsg)
                     } else {
                         ConfigManager.debug("[Promise] Resolving with result: $result")
-                        resolve.execute(result)
+                        // Convert result to GraalVM Value to ensure proper type conversion
+                        // (e.g., Kotlin List -> JS Array, Kotlin Map -> JS Object)
+                        val jsResult = context.asValue(result)
+                        resolve.execute(jsResult)
                     }
                 } catch (e: Exception) {
                     ConfigManager.debug("[Promise] Error during promise resolution: ${e.message}")
@@ -1287,6 +1368,9 @@ object GraalEngine {
      */
     private fun createServerAPIProxy(): ProxyObject {
         return ProxyObject.fromMap(mapOf(
+            // Event types enumeration
+            "eventTypes" to ProxyObject.fromMap(com.rhett.rhettjs.events.ServerEventManager.getEventTypes()),
+
             // Event registration - delegate to ServerEventManager
             "on" to ProxyExecutable { args ->
                 if (args.size < 2) {
@@ -1354,6 +1438,126 @@ object GraalEngine {
      */
     private fun createCommandsAPIProxy(): ProxyObject {
         /**
+         * Create a subcommand builder for a specific subcommand.
+         */
+        fun createSubcommandBuilder(commandName: String, subcommandName: String): ProxyObject {
+            // Get command data
+            val commandData = commandRegistry.getCommand(commandName)?.toMutableMap() ?: mutableMapOf(
+                "name" to commandName,
+                "description" to null,
+                "permission" to null,
+                "arguments" to mutableListOf<Map<String, String>>(),
+                "executor" to null,
+                "subcommands" to mutableMapOf<String, MutableMap<String, Any?>>()
+            )
+
+            // Get or create subcommands map
+            @Suppress("UNCHECKED_CAST")
+            val subcommands = commandData.getOrPut("subcommands") {
+                mutableMapOf<String, MutableMap<String, Any?>>()
+            } as MutableMap<String, MutableMap<String, Any?>>
+
+            // Get or create this subcommand's data
+            val subcommandData = subcommands.getOrPut(subcommandName) {
+                mutableMapOf(
+                    "name" to subcommandName,
+                    "arguments" to mutableListOf<Map<String, String>>(),
+                    "executor" to null
+                )
+            }
+
+            // Store changes
+            commandRegistry.storeCommand(commandName, commandData)
+
+            return ProxyObject.fromMap(mapOf(
+                "argument" to ProxyExecutable { args ->
+                    if (args.size < 2) {
+                        throw IllegalArgumentException("argument() requires name and type")
+                    }
+                    val argName = args[0].asString()
+                    val argType = args[1].asString()
+
+                    // Check if optional (3rd parameter provided)
+                    val isOptional = args.size >= 3
+                    val hasDefault = isOptional && !args[2].isNull
+
+                    // Unwrap the default value based on the argument type
+                    val defaultValue = if (hasDefault) {
+                        when (argType) {
+                            "string" -> args[2].asString()
+                            "int" -> args[2].asInt()
+                            "float" -> args[2].asDouble()
+                            else -> args[2] // For complex types, keep as Value
+                        }
+                    } else {
+                        null
+                    }
+
+                    // Validate argument type
+                    val validTypes = listOf("string", "int", "float", "player", "item", "block", "entity")
+                    if (argType !in validTypes) {
+                        throw IllegalArgumentException("Invalid argument type: $argType. Valid types: ${validTypes.joinToString(", ")}")
+                    }
+
+                    @Suppress("UNCHECKED_CAST")
+                    val arguments = subcommandData["arguments"] as MutableList<MutableMap<String, Any?>>
+
+                    // Validate: no required args after optional args
+                    // This is stricter than JavaScript but necessary for Brigadier command structure
+                    if (!isOptional && arguments.any { it["optional"] == true }) {
+                        throw IllegalArgumentException(
+                            "Cannot add required argument '$argName' after optional arguments. " +
+                            "In Brigadier commands, all required arguments must come before optional arguments. " +
+                            "Reorder your .argument() calls to put required arguments first."
+                        )
+                    }
+
+                    arguments.add(mutableMapOf(
+                        "name" to argName,
+                        "type" to argType,
+                        "optional" to isOptional,
+                        "hasDefault" to hasDefault,
+                        "default" to defaultValue
+                    ))
+                    commandRegistry.storeCommand(commandName, commandData)  // Persist changes
+
+                    // Return self for chaining
+                    createSubcommandBuilder(commandName, subcommandName)
+                },
+
+                "executes" to ProxyExecutable { args ->
+                    if (args.isEmpty()) {
+                        throw IllegalArgumentException("executes() requires a handler function")
+                    }
+                    val handler = args[0]
+
+                    if (!handler.canExecute()) {
+                        throw IllegalArgumentException("executes() argument must be a function")
+                    }
+
+                    subcommandData["executor"] = handler
+                    commandRegistry.storeCommand(commandName, commandData)  // Persist changes
+
+                    // Update registry's context reference to current context
+                    val currentContext = getOrCreateContext()
+                    if (commandRegistry.context == null) {
+                        ConfigManager.debug("[Commands] Updating registry context reference after reset")
+                        val dispatcher = commandRegistry.dispatcher
+                        val buildContext = commandRegistry.commandBuildContext
+                        if (dispatcher != null && buildContext != null) {
+                            commandRegistry.storeDispatcher(dispatcher, currentContext, buildContext)
+                        }
+                    }
+
+                    ConfigManager.debug("Registered subcommand: $commandName $subcommandName with ${(subcommandData["arguments"] as List<*>).size} arguments")
+
+                    // Return self for chaining
+                    createSubcommandBuilder(commandName, subcommandName)
+                }
+            ))
+        }
+
+        /**
          * Create a command builder that chains methods.
          */
         fun createCommandBuilder(name: String): ProxyObject {
@@ -1363,7 +1567,8 @@ object GraalEngine {
                 "description" to null,
                 "permission" to null,
                 "arguments" to mutableListOf<Map<String, String>>(),
-                "executor" to null
+                "executor" to null,
+                "subcommands" to mutableMapOf<String, MutableMap<String, Any?>>()
             )
 
             // Store in registry
@@ -1398,6 +1603,22 @@ object GraalEngine {
                     val argName = args[0].asString()
                     val argType = args[1].asString()
 
+                    // Check if optional (3rd parameter provided)
+                    val isOptional = args.size >= 3
+                    val hasDefault = isOptional && !args[2].isNull
+
+                    // Unwrap the default value based on the argument type
+                    val defaultValue = if (hasDefault) {
+                        when (argType) {
+                            "string" -> args[2].asString()
+                            "int" -> args[2].asInt()
+                            "float" -> args[2].asDouble()
+                            else -> args[2] // For complex types, keep as Value
+                        }
+                    } else {
+                        null
+                    }
+
                     // Validate argument type
                     val validTypes = listOf("string", "int", "float", "player", "item", "block", "entity")
                     if (argType !in validTypes) {
@@ -1405,8 +1626,25 @@ object GraalEngine {
                     }
 
                     @Suppress("UNCHECKED_CAST")
-                    val arguments = commandData["arguments"] as MutableList<Map<String, String>>
-                    arguments.add(mapOf("name" to argName, "type" to argType))
+                    val arguments = commandData["arguments"] as MutableList<MutableMap<String, Any?>>
+
+                    // Validate: no required args after optional args
+                    // This is stricter than JavaScript but necessary for Brigadier command structure
+                    if (!isOptional && arguments.any { it["optional"] == true }) {
+                        throw IllegalArgumentException(
+                            "Cannot add required argument '$argName' after optional arguments. " +
+                            "In Brigadier commands, all required arguments must come before optional arguments. " +
+                            "Reorder your .argument() calls to put required arguments first."
+                        )
+                    }
+
+                    arguments.add(mutableMapOf(
+                        "name" to argName,
+                        "type" to argType,
+                        "optional" to isOptional,
+                        "hasDefault" to hasDefault,
+                        "default" to defaultValue
+                    ))
                     commandRegistry.storeCommand(name, commandData)  // Persist changes
 
                     // Return self for chaining
@@ -1443,6 +1681,15 @@ object GraalEngine {
 
                     // Return self for chaining (though typically executes() is the last call)
                     createCommandBuilder(name)
+                },
+
+                "subcommand" to ProxyExecutable { args ->
+                    if (args.isEmpty()) {
+                        throw IllegalArgumentException("subcommand() requires a subcommand name")
+                    }
+                    val subcommandName = args[0].asString()
+                    // Return subcommand builder
+                    createSubcommandBuilder(name, subcommandName)
                 }
             ))
         }

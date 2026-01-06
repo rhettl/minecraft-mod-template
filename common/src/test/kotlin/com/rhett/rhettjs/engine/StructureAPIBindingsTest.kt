@@ -35,7 +35,7 @@ class StructureAPIBindingsTest {
                     throw new Error('Structure should be an object');
                 }
 
-                const methods = ['load', 'save', 'delete', 'exists', 'list', 'place', 'capture'];
+                const methods = ['exists', 'list', 'remove', 'capture', 'place'];
                 for (const method of methods) {
                     if (typeof Structure[method] !== 'function') {
                         throw new Error('Structure.' + method + ' should be a function');
@@ -51,55 +51,6 @@ class StructureAPIBindingsTest {
 
         val result = GraalEngine.executeScript(script)
         assertTrue(result is ScriptResult.Success, "Structure API should be importable with all methods")
-    }
-
-    @Test
-    fun `test Structure save returns Promise`() {
-        val script = ScriptInfo(
-            name = "test-structure-save-promise.js",
-            path = createTempScript("""
-                import Structure from 'Structure';
-
-                const data = { size: [5, 5, 5], blocks: [], palette: [] };
-                const promise = Structure.save('test', data);
-
-                if (!(promise instanceof Promise)) {
-                    throw new Error('Structure.save should return a Promise');
-                }
-
-                console.log('Structure.save returns Promise');
-            """),
-            category = ScriptCategory.STARTUP,
-            lastModified = System.currentTimeMillis(),
-            status = ScriptStatus.LOADED
-        )
-
-        val result = GraalEngine.executeScript(script)
-        assertTrue(result is ScriptResult.Success, "Structure.save should return Promise")
-    }
-
-    @Test
-    fun `test Structure load returns Promise`() {
-        val script = ScriptInfo(
-            name = "test-structure-load-promise.js",
-            path = createTempScript("""
-                import Structure from 'Structure';
-
-                const promise = Structure.load('test');
-
-                if (!(promise instanceof Promise)) {
-                    throw new Error('Structure.load should return a Promise');
-                }
-
-                console.log('Structure.load returns Promise');
-            """),
-            category = ScriptCategory.STARTUP,
-            lastModified = System.currentTimeMillis(),
-            status = ScriptStatus.LOADED
-        )
-
-        val result = GraalEngine.executeScript(script)
-        assertTrue(result is ScriptResult.Success, "Structure.load should return Promise")
     }
 
     @Test
@@ -127,19 +78,19 @@ class StructureAPIBindingsTest {
     }
 
     @Test
-    fun `test Structure delete returns Promise`() {
+    fun `test Structure remove returns Promise`() {
         val script = ScriptInfo(
-            name = "test-structure-delete-promise.js",
+            name = "test-structure-remove-promise.js",
             path = createTempScript("""
                 import Structure from 'Structure';
 
-                const promise = Structure.delete('test');
+                const promise = Structure.remove('test');
 
                 if (!(promise instanceof Promise)) {
-                    throw new Error('Structure.delete should return a Promise');
+                    throw new Error('Structure.remove should return a Promise');
                 }
 
-                console.log('Structure.delete returns Promise');
+                console.log('Structure.remove returns Promise');
             """),
             category = ScriptCategory.STARTUP,
             lastModified = System.currentTimeMillis(),
@@ -147,7 +98,7 @@ class StructureAPIBindingsTest {
         )
 
         val result = GraalEngine.executeScript(script)
-        assertTrue(result is ScriptResult.Success, "Structure.delete should return Promise")
+        assertTrue(result is ScriptResult.Success, "Structure.remove should return Promise")
     }
 
     @Test
@@ -291,7 +242,7 @@ class StructureAPIBindingsTest {
             path = createTempScript("""
                 import Structure from 'Structure';
 
-                const methods = ['captureLarge', 'placeLarge', 'getSize', 'listLarge', 'deleteLarge'];
+                const methods = ['captureLarge', 'placeLarge', 'getSize', 'listLarge', 'removeLarge'];
                 for (const method of methods) {
                     if (typeof Structure[method] !== 'function') {
                         throw new Error('Structure.' + method + ' should be a function');
@@ -413,19 +364,19 @@ class StructureAPIBindingsTest {
     }
 
     @Test
-    fun `test Structure deleteLarge returns Promise`() {
+    fun `test Structure removeLarge returns Promise`() {
         val script = ScriptInfo(
-            name = "test-deleteLarge-promise.js",
+            name = "test-removeLarge-promise.js",
             path = createTempScript("""
                 import Structure from 'Structure';
 
-                const promise = Structure.deleteLarge('test:large');
+                const promise = Structure.removeLarge('test:large');
 
                 if (!(promise instanceof Promise)) {
-                    throw new Error('Structure.deleteLarge should return a Promise');
+                    throw new Error('Structure.removeLarge should return a Promise');
                 }
 
-                console.log('Structure.deleteLarge returns Promise');
+                console.log('Structure.removeLarge returns Promise');
             """),
             category = ScriptCategory.STARTUP,
             lastModified = System.currentTimeMillis(),
@@ -433,7 +384,7 @@ class StructureAPIBindingsTest {
         )
 
         val result = GraalEngine.executeScript(script)
-        assertTrue(result is ScriptResult.Success, "Structure.deleteLarge should return Promise")
+        assertTrue(result is ScriptResult.Success, "Structure.removeLarge should return Promise")
     }
 
     @Test

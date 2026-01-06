@@ -157,11 +157,13 @@ class WorldAdapter(private val server: MinecraftServer) {
      * @param level The world to write to
      * @param blocks List of blocks to place
      * @param updateNeighbors If true, trigger neighbor block updates (default: true)
+     * @param mode Placement mode: "replace" (replace all), "keep_air" (skip air in structure), "overlay" (only place in air)
      */
     fun setBlocksInRegion(
         level: ServerLevel,
         blocks: List<PositionedBlock>,
-        updateNeighbors: Boolean = true
+        updateNeighbors: Boolean = true,
+        mode: String = "replace"
     ) {
         if (blocks.isEmpty()) return
 
@@ -182,7 +184,7 @@ class WorldAdapter(private val server: MinecraftServer) {
             chunkBounds.minChunkX, chunkBounds.maxChunkX,
             chunkBounds.minChunkZ, chunkBounds.maxChunkZ
         ) {
-            writeBlocks(level, blocks, updateNeighbors)
+            writeBlocks(level, blocks, updateNeighbors, mode)
         }
     }
 
@@ -192,13 +194,30 @@ class WorldAdapter(private val server: MinecraftServer) {
     private fun writeBlocks(
         level: ServerLevel,
         blocks: List<PositionedBlock>,
-        updateNeighbors: Boolean
+        updateNeighbors: Boolean,
+        mode: String
     ) {
         blocks.forEach { positioned ->
             val pos = BlockPos(positioned.x, positioned.y, positioned.z)
 
             // Convert BlockData -> Minecraft BlockState
             val blockState = convertToBlockState(positioned.block)
+
+            // Apply placement mode filtering
+            val shouldPlace = when (mode) {
+                "keep_air" -> {
+                    // Skip if structure block is air (don't replace world blocks with air)
+                    !blockState.isAir
+                }
+                "overlay" -> {
+                    // Only place if world block is air (only fill air spaces)
+                    val existingState = level.getBlockState(pos)
+                    existingState.isAir
+                }
+                else -> true // "replace" mode - always place
+            }
+
+            if (!shouldPlace) return@forEach
 
             // Place block
             val flags = if (updateNeighbors) {
@@ -403,8 +422,9 @@ class WorldAdapter(private val server: MinecraftServer) {
     /**
      * Convert Minecraft NBT Tag to Map<String, Any>.
      * Mirrors NBTAPI.nbtToJs logic to keep adapter self-contained.
+     * Internal for use by WorldManager.
      */
-    private fun convertNbtToMap(tag: net.minecraft.nbt.Tag): Any? {
+    internal fun convertNbtToMap(tag: net.minecraft.nbt.Tag): Any? {
         return when (tag) {
             is net.minecraft.nbt.CompoundTag -> {
                 val map = mutableMapOf<String, Any?>()

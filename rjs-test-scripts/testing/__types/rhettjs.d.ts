@@ -200,12 +200,11 @@ declare namespace NBT {
     function has(nbt: any, path: string): boolean;
 
     /**
-     * Delete path from NBT data
+     * Delete path
      * @param nbt - NBT data
      * @param path - Dot-separated path
-     * @returns Modified NBT data
      */
-    function remove(nbt: any, path: string): any;
+    function delete(nbt: any, path: string): any;
 
     /**
      * Merge NBT data
@@ -219,35 +218,6 @@ declare namespace NBT {
 // ============================================================================
 // Commands API
 // ============================================================================
-
-/** Subcommand builder for registration */
-interface SubcommandBuilder {
-    /**
-     * Add required subcommand argument
-     * @param name - Argument name
-     * @param type - Argument type
-     * @example
-     * .argument('name', 'string')  // Required
-     */
-    argument(name: string, type: "string" | "int" | "float" | "player" | "item" | "block" | "entity"): SubcommandBuilder;
-
-    /**
-     * Add optional subcommand argument with default value
-     * @param name - Argument name
-     * @param type - Argument type
-     * @param defaultValue - Default value if not provided (use null for no default)
-     * @example
-     * .argument('size', 'int', 48)        // Optional with default 48
-     * .argument('author', 'string', null)  // Optional with no default (undefined if not provided)
-     */
-    argument(name: string, type: "string" | "int" | "float" | "player" | "item" | "block" | "entity", defaultValue: any): SubcommandBuilder;
-
-    /**
-     * Set subcommand executor
-     * @param handler - Execution handler
-     */
-    executes(handler: (event: { caller: Caller; args: Record<string, any>; command: string; subcommand: string }) => void | Promise<void>): SubcommandBuilder;
-}
 
 /** Command builder for registration */
 interface CommandBuilder {
@@ -264,43 +234,22 @@ interface CommandBuilder {
     permission(perm: string | ((caller: Caller) => boolean)): CommandBuilder;
 
     /**
-     * Add required command argument
+     * Add command argument
      * @param name - Argument name
      * @param type - Argument type
-     * @example
-     * .argument('target', 'player')  // Required
      */
     argument(name: string, type: "string" | "int" | "float" | "player" | "item" | "block" | "entity"): CommandBuilder;
-
-    /**
-     * Add optional command argument with default value
-     * @param name - Argument name
-     * @param type - Argument type
-     * @param defaultValue - Default value if not provided (use null for no default)
-     * @example
-     * .argument('count', 'int', 1)        // Optional with default 1
-     * .argument('message', 'string', null) // Optional with no default (undefined if not provided)
-     */
-    argument(name: string, type: "string" | "int" | "float" | "player" | "item" | "block" | "entity", defaultValue: any): CommandBuilder;
 
     /**
      * Set command executor
      * @param handler - Execution handler
      */
     executes(handler: (event: { caller: Caller; args: Record<string, any>; command: string }) => void | Promise<void>): CommandBuilder;
-
-    /**
-     * Add a subcommand
-     * @param name - Subcommand name
-     * @returns Subcommand builder
-     */
-    subcommand(name: string): SubcommandBuilder;
 }
 
 /**
  * Command registration API
  * @example
- * // Simple command
  * Commands.register('heal')
  *   .description('Heal a player')
  *   .argument('target', 'player')
@@ -308,35 +257,6 @@ interface CommandBuilder {
  *     args.target.setHealth(args.target.maxHealth);
  *     caller.sendMessage(`Healed ${args.target.name}`);
  *   });
- *
- * // Command with optional arguments
- * Commands.register('give')
- *   .description('Give items to a player')
- *   .argument('item', 'item')
- *   .argument('count', 'int', 1)  // Optional, defaults to 1
- *   .executes(({ caller, args }) => {
- *     const count = args.count;  // Always present (defaults to 1)
- *     caller.sendMessage(`Giving ${count}x ${args.item}`);
- *   });
- *
- * // Subcommand with optional arguments
- * const cmd = Commands.register('structure')
- *   .description('Structure commands');
- *
- * cmd.subcommand('save')
- *   .argument('name', 'string')
- *   .argument('size', 'int', 48)          // Optional with default 48
- *   .argument('author', 'string', null)   // Optional with no default
- *   .executes(({ caller, args }) => {
- *     // args.name - always present (required)
- *     // args.size - always present (default 48)
- *     // args.author - undefined if not provided (null default)
- *     const author = args.author ?? 'Unknown';
- *     caller.sendMessage(`Saving ${args.name} (size=${args.size}, author=${author})`);
- *   });
- *
- * // Note: All required arguments must come BEFORE optional arguments
- * // This is INVALID: .argument('optional', 'int', 1).argument('required', 'string')
  */
 declare namespace Commands {
     /**
@@ -357,70 +277,17 @@ declare namespace Commands {
 // Server API
 // ============================================================================
 
-/** Available server event types */
-type ServerEventType =
-    | "playerJoin"
-    | "playerLeave"
-    | "blockLeftClick"
-    | "blockRightClick";
-
-/** Player join event */
-interface PlayerJoinEvent {
-    player: Player;
-}
-
-/** Player leave event */
-interface PlayerLeaveEvent {
-    player: Player;
-}
-
-/** Block click event (cancelable) */
-interface BlockClickEvent {
-    /** Full player object with all methods (sendMessage, teleport, etc.) */
-    player: Player;
-    position: Position;
-    block: Block;
-    face: "up" | "down" | "north" | "south" | "east" | "west" | null;
-    item: {
-        id: string;
-        count: number;
-        displayName: string | null;
-        nbt: Record<string, any> | null;
-    } | null;
-    /** Cancel this event to prevent the default action */
-    cancel(): void;
-}
-
 /** Server event handler */
 type ServerEventHandler = (event: any) => void | Promise<void>;
 
 /**
  * Server events and properties
  * @example
- * // Using event type constants
- * Server.on(Server.eventTypes.PLAYER_JOIN, (event) => {
- *   console.log(`${event.player.name} joined`);
- * });
- *
- * // Or using string literals
  * Server.on('playerJoin', (event) => {
  *   console.log(`${event.player.name} joined`);
  * });
- *
- * // Block click events
- * Server.on(Server.eventTypes.BLOCK_LEFT_CLICK, (event) => {
- *   console.log(`${event.player.name} left-clicked at ${event.position.x}, ${event.position.y}, ${event.position.z}`);
- * });
  */
 declare namespace Server {
-    /** Event type constants for type-safe event registration */
-    const eventTypes: {
-        PLAYER_JOIN: "playerJoin";
-        PLAYER_LEAVE: "playerLeave";
-        BLOCK_LEFT_CLICK: "blockLeftClick";
-        BLOCK_RIGHT_CLICK: "blockRightClick";
-    };
-
     /** Current TPS (ticks per second) */
     const tps: number;
 
@@ -435,32 +302,24 @@ declare namespace Server {
 
     /**
      * Register event handler
-     * @param event - Event name (use Server.eventTypes for constants)
+     * @param event - Event name
      * @param handler - Event handler
-     * @example
-     * Server.on(Server.eventTypes.PLAYER_JOIN, (event) => {
-     *   console.log(`${event.player.name} joined`);
-     * });
      */
-    function on(event: ServerEventType, handler: ServerEventHandler): void;
+    function on(event: "playerJoin" | "playerLeave" | string, handler: ServerEventHandler): void;
 
     /**
      * Register one-time event handler
-     * @param event - Event name (use Server.eventTypes for constants)
+     * @param event - Event name
      * @param handler - Event handler
-     * @example
-     * Server.once(Server.eventTypes.PLAYER_LEAVE, (event) => {
-     *   console.log(`${event.player.name} left (handled once)`);
-     * });
      */
-    function once(event: ServerEventType, handler: ServerEventHandler): void;
+    function once(event: "playerJoin" | "playerLeave" | string, handler: ServerEventHandler): void;
 
     /**
      * Remove event handler
      * @param event - Event name
      * @param handler - Event handler
      */
-    function off(event: ServerEventType, handler: ServerEventHandler): void;
+    function off(event: string, handler: ServerEventHandler): void;
 
     /**
      * Broadcast message to all players
@@ -495,29 +354,6 @@ declare namespace World {
      * @returns Block data
      */
     function getBlock(position: Position): Promise<Block>;
-
-    /**
-     * Get block entity data at position
-     * Returns null if no block entity exists at the position
-     * @param position - Block position
-     * @returns Block entity NBT data or null
-     * @example
-     * // Read lectern book and page
-     * const lectern = await World.getBlockEntity({ x: 100, y: 64, z: 200 });
-     * if (lectern) {
-     *   console.log(`Selected page: ${lectern.Page}`);
-     *   const book = JSON.parse(lectern.Book?.tag?.pages?.[lectern.Page] || '""');
-     *   console.log(`Page content: ${book}`);
-     * }
-     *
-     * // Read sign text
-     * const sign = await World.getBlockEntity({ x: 101, y: 64, z: 200 });
-     * if (sign) {
-     *   const line1 = JSON.parse(sign.front_text?.messages?.[0] || '""');
-     *   console.log(`Sign line 1: ${line1}`);
-     * }
-     */
-    function getBlockEntity(position: Position): Promise<Record<string, any> | null>;
 
     /**
      * Set block at position
@@ -620,13 +456,6 @@ interface PlaceOptions {
     rotation?: 0 | 90 | 180 | 270;
     centered?: boolean;
     dimension?: string;
-    /**
-     * Placement mode controlling block replacement behavior:
-     * - "replace" (default): Replace all blocks at target location
-     * - "keep_air": Don't place air blocks from structure (preserves existing blocks where structure has air)
-     * - "overlay": Only place blocks where target location is air (fills empty space only)
-     */
-    mode?: "replace" | "keep_air" | "overlay";
 }
 
 /** Options for large structure capture */
@@ -663,7 +492,7 @@ declare namespace Structure {
      * @param name - Structure name
      * @returns True if deleted
      */
-    function remove(name: string): Promise<boolean>;
+    function delete(name: string): Promise<boolean>;
 
     /**
      * Capture region as structure
@@ -730,117 +559,11 @@ declare namespace Structure {
     function listLarge(namespace?: string): Promise<string[]>;
 
     /**
-     * Remove large structure (all pieces)
+     * Delete large structure (all pieces)
      * @param name - Structure name
-     * @returns True if removed
+     * @returns True if deleted
      */
-    function removeLarge(name: string): Promise<boolean>;
-
-    /**
-     * List all unique blocks in a structure with their counts
-     * @param name - Structure name
-     * @returns Map of blockId → count (e.g., {"minecraft:stone": 450, "terralith:stone": 23})
-     * @example
-     * const blocks = await Structure.blocksList('test:house');
-     * console.log(`Contains ${Object.keys(blocks).length} unique blocks`);
-     * blocks.forEach((count, blockId) => console.log(`${blockId}: ${count}`));
-     */
-    function blocksList(name: string): Promise<Record<string, number>>;
-
-    /**
-     * Extract unique mod namespaces from structure blocks
-     * @param name - Structure name
-     * @returns Array of unique namespaces (e.g., ["minecraft", "terralith"])
-     * @example
-     * const namespaces = await Structure.blocksNamespaces('test:house');
-     * console.log(`Requires mods: ${namespaces.filter(ns => ns !== 'minecraft').join(', ')}`);
-     */
-    function blocksNamespaces(name: string): Promise<string[]>;
-
-    /**
-     * Replace blocks in a structure according to replacement map
-     * Creates automatic backup before modification
-     * @param name - Structure name
-     * @param replacementMap - Map of oldBlockId → newBlockId
-     * @example
-     * // Convert terralith to vanilla
-     * await Structure.blocksReplace('test:house', {
-     *   'terralith:stone_wall': 'minecraft:cobblestone_wall',
-     *   'terralith:oak_planks': 'minecraft:oak_planks'
-     * });
-     */
-    function blocksReplace(name: string, replacementMap: Record<string, string>): Promise<void>;
-
-    /**
-     * Replace blocks in all pieces of a large structure
-     * Creates automatic directory backup before modification
-     * Also updates metadata.requires[] in 0_0_0.nbt with new namespace requirements
-     * @param name - Large structure name
-     * @param replacementMap - Map of oldBlockId → newBlockId
-     * @example
-     * // Convert entire large structure to vanilla
-     * const blocks = await Structure.blocksList('test:rjs-large/castle/0_0_0');
-     * const moddedBlocks = Object.keys(blocks).filter(id => !id.startsWith('minecraft:'));
-     *
-     * const replacements = {};
-     * moddedBlocks.forEach(id => {
-     *   // Map to vanilla equivalents
-     *   replacements[id] = 'minecraft:stone'; // or your custom logic
-     * });
-     *
-     * await Structure.blocksReplaceLarge('test:castle', replacements);
-     */
-    function blocksReplaceLarge(name: string, replacementMap: Record<string, string>): Promise<void>;
-
-    /**
-     * List available backups for a structure
-     * Returns timestamps in descending order (newest first)
-     * @param name - Structure name
-     * @returns Array of backup timestamps (e.g., ["2026-01-05_15-30-45", "2026-01-05_14-20-30"])
-     * @example
-     * const backups = await Structure.listBackups('test:house');
-     * console.log(`${backups.length} backups available`);
-     * backups.forEach(ts => console.log(`  - ${ts}`));
-     */
-    function listBackups(name: string): Promise<string[]>;
-
-    /**
-     * Restore structure from backup
-     * @param name - Structure name
-     * @param timestamp - Optional specific backup timestamp, or undefined for most recent
-     * @example
-     * // Restore from most recent backup
-     * await Structure.restoreBackup('test:house');
-     *
-     * // Restore from specific backup
-     * await Structure.restoreBackup('test:house', '2026-01-05_15-30-45');
-     */
-    function restoreBackup(name: string, timestamp?: string): Promise<void>;
-
-    /**
-     * List available directory backups for a large structure
-     * Returns timestamps in descending order (newest first)
-     * @param name - Large structure name
-     * @returns Array of backup timestamps (e.g., ["2026-01-05_15-30-45", "2026-01-05_14-20-30"])
-     * @example
-     * const backups = await Structure.listBackupsLarge('test:castle');
-     * console.log(`${backups.length} directory backups available`);
-     */
-    function listBackupsLarge(name: string): Promise<string[]>;
-
-    /**
-     * Restore large structure from directory backup
-     * Restores all piece files from the backup directory
-     * @param name - Large structure name
-     * @param timestamp - Optional specific backup timestamp, or undefined for most recent
-     * @example
-     * // Restore from most recent backup
-     * await Structure.restoreBackupLarge('test:castle');
-     *
-     * // Restore from specific backup
-     * await Structure.restoreBackupLarge('test:castle', '2026-01-05_15-30-45');
-     */
-    function restoreBackupLarge(name: string, timestamp?: string): Promise<void>;
+    function deleteLarge(name: string): Promise<boolean>;
 }
 
 // ============================================================================
@@ -889,39 +612,3 @@ declare namespace Script {
 
 export default Runtime;
 export { console, wait, Store, NBT, Commands, Server, World, Structure, Script };
-
-// ============================================================================
-// Ambient Module Declarations (for ES6 import support)
-// ============================================================================
-
-declare module 'Runtime' {
-    export = Runtime;
-}
-
-declare module 'Store' {
-    export = Store;
-}
-
-declare module 'NBT' {
-    export = NBT;
-}
-
-declare module 'Commands' {
-    export = Commands;
-}
-
-declare module 'Server' {
-    export = Server;
-}
-
-declare module 'World' {
-    export = World;
-}
-
-declare module 'Structure' {
-    export = Structure;
-}
-
-declare module 'Script' {
-    export = Script;
-}

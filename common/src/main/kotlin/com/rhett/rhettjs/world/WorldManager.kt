@@ -132,6 +132,85 @@ object WorldManager {
     }
 
     /**
+     * Get block entity data at position (async).
+     * Returns Promise<object | null> where object contains block entity NBT data.
+     *
+     * For lecterns: { Book: {...}, Page: number }
+     * For signs: { front_text: { messages: [...] }, back_text: { messages: [...] } }
+     * For chests: { Items: [...] }
+     * etc.
+     *
+     * Returns null if no block entity exists at position.
+     */
+    fun getBlockEntity(position: Value): CompletableFuture<Value?> {
+        val future = CompletableFuture<Value?>()
+        val srv = server ?: run {
+            future.completeExceptionally(IllegalStateException("Server not available"))
+            return future
+        }
+        val context = graalContext ?: run {
+            future.completeExceptionally(IllegalStateException("GraalVM context not available"))
+            return future
+        }
+        val adapter = worldAdapter ?: run {
+            future.completeExceptionally(IllegalStateException("WorldAdapter not initialized"))
+            return future
+        }
+
+        try {
+            // Extract position from JS
+            val x = position.getMember("x").asInt()
+            val y = position.getMember("y").asInt()
+            val z = position.getMember("z").asInt()
+            val dimension = if (position.hasMember("dimension")) {
+                position.getMember("dimension").asString()
+            } else {
+                "minecraft:overworld"
+            }
+
+            // Execute on main thread
+            srv.execute {
+                try {
+                    val level = adapter.getLevel(dimension)
+                    if (level == null) {
+                        future.completeExceptionally(IllegalArgumentException("Unknown dimension: $dimension"))
+                        return@execute
+                    }
+
+                    val pos = BlockPos(x, y, z)
+                    val blockEntity = level.getBlockEntity(pos)
+
+                    if (blockEntity == null) {
+                        // No block entity at this position
+                        future.complete(null)
+                        return@execute
+                    }
+
+                    // Convert block entity to JS-friendly map
+                    val registryAccess = level.registryAccess()
+                    val nbtTag = blockEntity.saveWithoutMetadata(registryAccess)
+                    val dataMap = adapter.convertNbtToMap(nbtTag) as? Map<*, *>
+
+                    if (dataMap != null) {
+                        // Convert to ProxyObject for JavaScript
+                        @Suppress("UNCHECKED_CAST")
+                        val jsData = context.asValue(dataMap as Map<String, Any>)
+                        future.complete(jsData)
+                    } else {
+                        future.complete(null)
+                    }
+                } catch (e: Exception) {
+                    future.completeExceptionally(e)
+                }
+            }
+        } catch (e: Exception) {
+            future.completeExceptionally(e)
+        }
+
+        return future
+    }
+
+    /**
      * Set block at position (async).
      * Returns Promise<void>.
      */

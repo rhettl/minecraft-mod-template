@@ -95,9 +95,17 @@ All adapters (PlayerAdapter, BlockAdapter, etc.) exist to enforce this boundary.
 **Documentation locations**:
 - `docs/` — Public documentation, guides, API docs (committed to repo)
 - `dev-docs/` — Internal working files, investigations, scratch notes, screenshots (gitignored, for you and Claude to collaborate)
+  - `dev-docs/TODO.md` — **Inter-session todo list** for tracking tasks across Claude Code sessions
 - Root — Only essential files (README.md, CLAUDE.md, build scripts)
 
 When creating documentation or notes, use the appropriate directory. Do not litter the root with files.
+
+**Task Management**:
+- **Session todos**: Use Claude Code's built-in TodoWrite tool during active sessions
+- **Inter-session todos**: Use `dev-docs/TODO.md` for tasks that need to persist across sessions
+  - Keep the completed tasks section pruned to only 1-2 sessions of recent completions
+  - Archive or delete older completed tasks to keep the file focused
+- **Long-term issues**: Use GitHub Issues for user-facing bugs/features
 
 ## Tech Stack
 

@@ -1,0 +1,10 @@
+{
+  // Enable or disable the entire RhettJS mod
+  "enabled": true,
+
+  // Enable detailed logging for debugging scripts and mod behavior
+  "debug_logging": true,
+
+  // Run in-game testing mode (automatically executes test scripts on server start)
+  "debug_run_ingame_testing": false,
+}

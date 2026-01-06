@@ -215,20 +215,20 @@ class NBTAPIBindingsTest {
                     Name: NBT.string('Test')
                 });
 
-                const modified = NBT.delete(original, 'Health');
+                const modified = NBT.remove(original, 'Health');
 
                 // Should be immutable
                 if (!NBT.has(original, 'Health')) {
                     throw new Error('Original should not be modified');
                 }
                 if (NBT.has(modified, 'Health')) {
-                    throw new Error('Modified should not have deleted key');
+                    throw new Error('Modified should not have removed key');
                 }
                 if (!NBT.has(modified, 'Name')) {
                     throw new Error('Modified should keep other keys');
                 }
 
-                console.log('NBT.delete works (immutable)');
+                console.log('NBT.remove works (immutable)');
             """),
             category = ScriptCategory.STARTUP,
             lastModified = System.currentTimeMillis(),
@@ -236,7 +236,7 @@ class NBTAPIBindingsTest {
         )
 
         val result = GraalEngine.executeScript(script)
-        assertTrue(result is ScriptResult.Success, "NBT.delete should return new object")
+        assertTrue(result is ScriptResult.Success, "NBT.remove should return new object")
     }
 
     @Test
@@ -279,7 +279,7 @@ class NBTAPIBindingsTest {
                     throw new Error('NBT should be an object');
                 }
 
-                const methods = ['compound', 'list', 'string', 'int', 'double', 'byte', 'get', 'set', 'has', 'delete'];
+                const methods = ['compound', 'list', 'string', 'int', 'double', 'byte', 'get', 'set', 'has', 'remove'];
                 for (const method of methods) {
                     if (typeof NBT[method] !== 'function') {
                         throw new Error('NBT.' + method + ' should be a function');

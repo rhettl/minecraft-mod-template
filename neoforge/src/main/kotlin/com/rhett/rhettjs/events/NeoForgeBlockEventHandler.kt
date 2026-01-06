@@ -18,7 +18,7 @@ object NeoForgeBlockEventHandler {
         val item = player.getItemInHand(hand)
         val face = event.face
 
-        // Convert to our internal event model and trigger
+        // Convert to our internal event model
         val eventData = BlockEventAdapter.createClickEvent(
             pos = pos,
             level = level,
@@ -28,9 +28,11 @@ object NeoForgeBlockEventHandler {
             isRightClick = true
         )
 
-        // TODO: Re-implement event trigger for GraalVM
-        val cancelled = false // BlockEventTrigger.trigger("blockRightClicked", eventData, player)
-        if (cancelled) {
+        // Trigger event through ServerEventManager (pass player for wrapping)
+        com.rhett.rhettjs.events.ServerEventManager.triggerBlockClick(eventData, player as net.minecraft.server.level.ServerPlayer)
+
+        // Check if event was cancelled
+        if (eventData.cancelled) {
             event.isCanceled = true
         }
     }
@@ -44,7 +46,7 @@ object NeoForgeBlockEventHandler {
         val item = player.getItemInHand(hand)
         val face = event.face
 
-        // Convert to our internal event model and trigger
+        // Convert to our internal event model
         val eventData = BlockEventAdapter.createClickEvent(
             pos = pos,
             level = level,
@@ -54,9 +56,11 @@ object NeoForgeBlockEventHandler {
             isRightClick = false
         )
 
-        // TODO: Re-implement event trigger for GraalVM
-        val cancelled = false // BlockEventTrigger.trigger("blockLeftClicked", eventData, player)
-        if (cancelled) {
+        // Trigger event through ServerEventManager (pass player for wrapping)
+        com.rhett.rhettjs.events.ServerEventManager.triggerBlockClick(eventData, player as net.minecraft.server.level.ServerPlayer)
+
+        // Check if event was cancelled
+        if (eventData.cancelled) {
             event.isCanceled = true
         }
     }

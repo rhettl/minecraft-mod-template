@@ -66,7 +66,13 @@ sealed class BlockEventData {
         val item: ItemData?,
         val face: BlockFace?,
         val isRightClick: Boolean
-    ) : BlockEventData()
+    ) : BlockEventData() {
+        /**
+         * Whether this event has been cancelled by a handler.
+         * If true, the default action will be prevented.
+         */
+        var cancelled: Boolean = false
+    }
 
     /**
      * Event data for block placement events.

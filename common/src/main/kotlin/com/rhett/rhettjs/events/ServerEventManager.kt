@@ -26,6 +26,27 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object ServerEventManager {
 
+    /**
+     * Available event types as constants.
+     * Exposed to JavaScript via Server.eventTypes.
+     */
+    object EventTypes {
+        const val PLAYER_JOIN = "playerJoin"
+        const val PLAYER_LEAVE = "playerLeave"
+        const val BLOCK_LEFT_CLICK = "blockLeftClick"
+        const val BLOCK_RIGHT_CLICK = "blockRightClick"
+    }
+
+    /**
+     * Get all event type names as a map for JavaScript consumption.
+     */
+    fun getEventTypes(): Map<String, String> = mapOf(
+        "PLAYER_JOIN" to EventTypes.PLAYER_JOIN,
+        "PLAYER_LEAVE" to EventTypes.PLAYER_LEAVE,
+        "BLOCK_LEFT_CLICK" to EventTypes.BLOCK_LEFT_CLICK,
+        "BLOCK_RIGHT_CLICK" to EventTypes.BLOCK_RIGHT_CLICK
+    )
+
     // Event handler storage
     private val eventHandlers = ConcurrentHashMap<String, MutableList<Value>>()
     private val oneTimeHandlers = ConcurrentHashMap<String, MutableList<Value>>()
@@ -134,7 +155,85 @@ object ServerEventManager {
         val wrappedPlayer = PlayerAdapter.toJS(player, context)
 
         // Trigger the event
-        triggerEvent("playerLeave", wrappedPlayer)
+        triggerEvent(EventTypes.PLAYER_LEAVE, wrappedPlayer)
+    }
+
+    /**
+     * Trigger a block click event.
+     * Called from platform code when a player interacts with a block.
+     *
+     * @param eventData The event data from BlockEventAdapter
+     * @param player The ServerPlayer who triggered the event (for full wrapping)
+     */
+    fun triggerBlockClick(eventData: BlockEventData.Click, player: ServerPlayer) {
+        val context = graalContext ?: run {
+            RhettJSCommon.LOGGER.warn("[ServerEventManager] Cannot trigger block click: GraalVM context not available")
+            return
+        }
+
+        // Convert to JavaScript-friendly format (anti-corruption shield)
+        val jsEventData = convertBlockClickToJS(eventData, player, context)
+
+        // Trigger the event with the appropriate event type
+        val eventType = if (!eventData.isRightClick) EventTypes.BLOCK_LEFT_CLICK else EventTypes.BLOCK_RIGHT_CLICK
+        triggerEvent(eventType, jsEventData)
+    }
+
+    /**
+     * Convert BlockEventData.Click to JavaScript format.
+     * Follows anti-corruption pattern - no Java objects exposed.
+     * Includes cancel() method to allow JavaScript to cancel the event.
+     * Uses PlayerAdapter to wrap player with full API (including sendMessage()).
+     */
+    private fun convertBlockClickToJS(
+        event: BlockEventData.Click,
+        player: ServerPlayer,
+        context: Context
+    ): org.graalvm.polyglot.proxy.ProxyObject {
+        // Wrap player using PlayerAdapter to get full API including sendMessage()
+        val wrappedPlayer = PlayerAdapter.toJS(player, context)
+
+        // Convert position
+        val positionMap = mapOf(
+            "x" to event.position.x,
+            "y" to event.position.y,
+            "z" to event.position.z,
+            "dimension" to event.position.dimension
+        )
+
+        // Convert block data
+        val blockMap = mapOf(
+            "id" to event.block.id,
+            "properties" to event.block.properties
+        )
+
+        // Convert item data (nullable)
+        val itemMap = event.item?.let {
+            mapOf(
+                "id" to it.id,
+                "count" to it.count,
+                "displayName" to it.displayName,
+                "nbt" to it.nbt
+            )
+        }
+
+        // Convert face (nullable)
+        val faceString = event.face?.name?.lowercase()
+
+        // Create the event object with cancel() method
+        val eventMap = mutableMapOf<String, Any?>(
+            "player" to wrappedPlayer,  // Fully wrapped player with sendMessage() etc.
+            "position" to org.graalvm.polyglot.proxy.ProxyObject.fromMap(positionMap),
+            "block" to org.graalvm.polyglot.proxy.ProxyObject.fromMap(blockMap),
+            "item" to (itemMap?.let { org.graalvm.polyglot.proxy.ProxyObject.fromMap(it) }),
+            "face" to faceString,
+            "cancel" to org.graalvm.polyglot.proxy.ProxyExecutable {
+                event.cancelled = true
+                null
+            }
+        )
+
+        return org.graalvm.polyglot.proxy.ProxyObject.fromMap(eventMap)
     }
 
     /**

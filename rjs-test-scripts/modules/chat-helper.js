@@ -3,20 +3,68 @@
  *
  * Create clickable buttons and build interactive messages with button replacements.
  *
- * Usage:
- *   let btn = ChatHelper.button('[Click]', '/command');
- *   let json = ChatHelper.replace('Text [Click] here', [btn]);
- *   Caller.sendRaw(json);
+ * @example Basic Usage
+ * import { ChatHelper } from './chat-helper.js';
+ * let btn = ChatHelper.button('[Click]', '/command');
+ * let json = ChatHelper.replace('Text [Click] here', [btn]);
+ * Caller.sendRaw(json);
  *
- * Or with MessageBuffer:
- *   buffer.raw(ChatHelper.replace('Text [Click]', [btn]));
- *   buffer.send();
+ * @example With MessageBuffer
+ * import { MessageBuffer } from './message-buffer.js';
+ * import { ChatHelper } from './chat-helper.js';
+ * let buffer = new MessageBuffer(Caller);
+ * buffer.raw(ChatHelper.replace('Text [Click]', [btn]));
+ * buffer.send();
  *
- * Convenience alias:
- *   let c = ChatHelper;
- *   c.button('[Scan]', '/cmd');
+ * @example Using enumerations
+ * import { ChatHelper } from './chat-helper.js';
+ * let btn = ChatHelper.button('[Fix]', '/fix', {
+ *   color: ChatHelper.colors.GREEN,
+ *   clickAction: ChatHelper.clickActions.RUN_COMMAND
+ * });
  */
-const ChatHelper = {};
+
+/**
+ * Minecraft chat color names
+ */
+const colors = {
+  BLACK: 'black',
+  DARK_BLUE: 'dark_blue',
+  DARK_GREEN: 'dark_green',
+  DARK_AQUA: 'dark_aqua',
+  DARK_RED: 'dark_red',
+  DARK_PURPLE: 'dark_purple',
+  GOLD: 'gold',
+  GRAY: 'gray',
+  DARK_GRAY: 'dark_gray',
+  BLUE: 'blue',
+  GREEN: 'green',
+  AQUA: 'aqua',
+  RED: 'red',
+  LIGHT_PURPLE: 'light_purple',
+  YELLOW: 'yellow',
+  WHITE: 'white'
+};
+
+/**
+ * Minecraft click event action types
+ */
+const clickActions = {
+  RUN_COMMAND: 'run_command',
+  SUGGEST_COMMAND: 'suggest_command',
+  OPEN_URL: 'open_url',
+  CHANGE_PAGE: 'change_page',
+  COPY_TO_CLIPBOARD: 'copy_to_clipboard'
+};
+
+/**
+ * Minecraft hover event action types
+ */
+const hoverActions = {
+  SHOW_TEXT: 'show_text',
+  SHOW_ITEM: 'show_item',
+  SHOW_ENTITY: 'show_entity'
+};
 
 /**
  * Create a clickable chat button.
@@ -24,8 +72,8 @@ const ChatHelper = {};
  * @param {string} label - Button text (e.g., '[Scan]', '<Fix>', '{Go}')
  * @param {string} command - Command to execute when clicked
  * @param {Object} [options] - Optional Minecraft text component properties
- * @param {string} [options.color='aqua'] - Text color
- * @param {string} [options.clickAction='run_command'] - Click action type
+ * @param {string} [options.color] - Text color (use ChatHelper.colors, default: AQUA)
+ * @param {string} [options.clickAction] - Click action type (use ChatHelper.clickActions, default: RUN_COMMAND)
  * @param {string} [options.hoverText] - Hover tooltip text
  * @param {boolean} [options.bold] - Bold text
  * @param {boolean} [options.italic] - Italic text
@@ -39,9 +87,9 @@ const ChatHelper = {};
  * ChatHelper.button('[Scan]', '/rjs run detect file')
  *
  * @example
- * // Styled button with tooltip
+ * // Styled button with tooltip using enumerations
  * ChatHelper.button('[Fix]', '/rjs run detect file --fix', {
- *   color: 'green',
+ *   color: ChatHelper.colors.GREEN,
  *   bold: true,
  *   hoverText: 'Click to fix all issues'
  * })
@@ -49,23 +97,23 @@ const ChatHelper = {};
  * @example
  * // Suggest command instead of running it
  * ChatHelper.button('[?]', '/help detect', {
- *   clickAction: 'suggest_command',
+ *   clickAction: ChatHelper.clickActions.SUGGEST_COMMAND,
  *   hoverText: 'Get help with detect command'
  * })
  */
-ChatHelper.button = function(label, command, options) {
+function button(label, command, options) {
   options = options || {};
 
   let button = {
     label: label, // Used by replace() to find where to insert this button
     text: label,
-    color: options.color || 'aqua',
+    color: options.color || colors.AQUA,
     clickEvent: {
-      action: options.clickAction || 'run_command',
+      action: options.clickAction || clickActions.RUN_COMMAND,
       value: command
     },
     hoverEvent: {
-      action: 'show_text',
+      action: hoverActions.SHOW_TEXT,
       value: options.hoverText || ('Click to ' + label)
     }
   };
@@ -79,7 +127,7 @@ ChatHelper.button = function(label, command, options) {
   }
 
   return button;
-};
+}
 
 /**
  * Build an interactive chat message by replacing button labels in text.
@@ -136,7 +184,7 @@ ChatHelper.button = function(label, command, options) {
  *   ChatHelper.button('**stars**', '/cmd3')
  * ]);
  */
-ChatHelper.replace = function(text, buttons, partsMapper) {
+function replace(text, buttons, partsMapper) {
   let parts = [];
   let remaining = text;
 
@@ -174,4 +222,13 @@ ChatHelper.replace = function(text, buttons, partsMapper) {
   }
 
   return JSON.stringify(parts);
+}
+
+const ChatHelper = {
+  button,
+  replace,
+  colors,
+  clickActions,
+  hoverActions
 };
+export default ChatHelper;
