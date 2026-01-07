@@ -1,4 +1,5 @@
 import Commands from "rhettjs/commands";
+import World from 'rhettjs/world';
 import WorldgenStructure from "rhettjs/worldgen-structure";
 import {filterByPattern} from "../modules/resource-pattern.js";
 
@@ -195,32 +196,51 @@ cmd.subcommand('controller-place')
   // .argument('rotation', 'string', null)    // Must be quoted (e.g., "none")
   .executes(async ({caller, args}) => {
     const dimension = caller.isPlayer ? caller.position.dimension : caller.dimension;
-
-    try {
-
+    let name = '';
+    const signPos = {
+      x: args.signX,
+      y: args.signY,
+      z: args.signZ,
+      dimension,
     }
-
-
+    try {
+      const sign = await World.getBlockEntity(signPos);
+      if (sign) {
+        const lines = sign.front_text?.messages ?? [];
+        name = lines
+          .map(i => JSON.parse(i))
+          .join('')
+          .trim()
+          .replace(/\s+/g, '')
+        ;
+      } else {
+        console.error(`no sign at ${signPos}`);
+        return 0;
+      }
+    } catch (err) {
+      console.error(`failed getting sign at ${signPos}: ${err}`);
+      return 0;
+    }
 
     try {
       caller.sendMessage(`Placing ${args.name} at ${args.x}, ${args.z}...`);
 
       const options = {
-        x: args.x,
-        z: args.z,
-        surface: args.surface,
+        x: 0,
+        z: 0,
+        surface: 'scan',
         dimension: dimension,
       };
 
-      if (args.seed !== null) {
-        options.seed = args.seed;
-      }
+      // if (args.seed !== null) {
+      //   options.seed = args.seed;
+      // }
+      //
+      // if (args.rotation !== null) {
+      //   options.rotation = args.rotation;
+      // }
 
-      if (args.rotation !== null) {
-        options.rotation = args.rotation;
-      }
-
-      const result = await WorldgenStructure.place(args.name, options);
+      const result = await WorldgenStructure.place(name, options);
 
       if (result.success) {
         caller.sendMessage(`✓ Structure placed successfully!`);
