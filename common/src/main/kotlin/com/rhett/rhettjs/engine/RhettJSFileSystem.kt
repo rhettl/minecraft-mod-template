@@ -22,7 +22,9 @@ import java.util.*
  * Custom FileSystem implementation that enables bare specifier imports for built-in APIs.
  *
  * Intercepts module resolution to support:
- * - `import World from 'World'` - Built-in modules (bare specifiers)
+ * - `import World from 'World'` - Built-in modules (legacy bare specifiers)
+ * - `import World from 'rhettjs/world'` - Submodule imports
+ * - `import {World, Commands} from 'rhettjs'` - Barrel imports
  * - `import { add } from '../modules/math.js'` - User modules (relative paths)
  *
  * When a bare specifier for a built-in module is detected, this FileSystem:
@@ -35,8 +37,21 @@ class RhettJSFileSystem(
 ) : FileSystem {
 
     companion object {
-        private val BUILT_IN_MODULES = setOf("World", "Structure", "Store", "NBT", "Server", "Commands")
+        private val BUILT_IN_MODULES = setOf("World", "StructureNbt", "LargeStructureNbt", "Store", "NBT", "Server", "Commands", "Runtime", "Script")
         private const val VIRTUAL_PREFIX = "/__builtins__/"
+
+        // Map submodule paths to their API names
+        private val SUBMODULE_MAP = mapOf(
+            "rhettjs/world" to "World",
+            "rhettjs/commands" to "Commands",
+            "rhettjs/server" to "Server",
+            "rhettjs/store" to "Store",
+            "rhettjs/nbt" to "NBT",
+            "rhettjs/runtime" to "Runtime",
+            "rhettjs/script" to "Script",
+            "rhettjs/structure" to "StructureNbt", // Default to StructureNbt for structure imports
+            "rhettjs" to "rhettjs" // Barrel import
+        )
     }
 
     override fun parsePath(uri: URI): Path {
@@ -102,26 +117,50 @@ class RhettJSFileSystem(
 
     /**
      * Check if a specifier is a bare built-in module reference.
-     * Examples: "World", "file:///World", "World" (from URI)
+     * Examples:
+     * - "World", "file:///World" (legacy)
+     * - "rhettjs/world", "rhettjs/commands" (submodules)
+     * - "rhettjs" (barrel import)
      */
     private fun isBareBuiltInSpecifier(specifier: String): Boolean {
-        // Extract just the module name from URI/path
-        val name = extractModuleName(specifier)
+        // Normalize the specifier (remove file:/// prefix, query params, etc.)
+        val normalized = normalizeSpecifier(specifier)
 
-        // It's a built-in if:
-        // 1. Name is in our built-in list
-        // 2. Doesn't have .js extension
-        // 3. Doesn't look like a relative path (../, ./)
+        // Check for rhettjs/* imports (submodules and barrel)
+        if (normalized.startsWith("rhettjs")) {
+            val isBuiltIn = normalized in SUBMODULE_MAP || normalized == "rhettjs"
+            if (isBuiltIn) {
+                ConfigManager.debug("Detected rhettjs submodule/barrel specifier: $specifier -> $normalized")
+            }
+            return isBuiltIn
+        }
+
+        // Check for legacy bare specifiers (just the module name)
+        val name = extractModuleName(normalized)
         val isBuiltIn = name in BUILT_IN_MODULES &&
-                !name.endsWith(".js") &&
-                !specifier.contains("../") &&
-                !specifier.contains("./")
+                !normalized.endsWith(".js") &&
+                !normalized.contains("../") &&
+                !normalized.contains("./")
 
         if (isBuiltIn) {
-            ConfigManager.debug("Detected bare built-in specifier: $specifier -> $name")
+            ConfigManager.debug("Detected legacy bare built-in specifier: $specifier -> $name")
         }
 
         return isBuiltIn
+    }
+
+    /**
+     * Normalize a specifier by removing file:/// prefix, query params, etc.
+     * - "file:///rhettjs/world" -> "rhettjs/world"
+     * - "World?foo=bar" -> "World"
+     */
+    private fun normalizeSpecifier(specifier: String): String {
+        return specifier
+            .removePrefix("file://")
+            .removePrefix("file:")
+            .removePrefix("/")
+            .substringBefore('?')
+            .substringBefore('#')
     }
 
     /**
@@ -129,20 +168,52 @@ class RhettJSFileSystem(
      * - "World" -> "World"
      * - "file:///World" -> "World"
      * - "/path/to/World" -> "World"
+     * - "rhettjs/world" -> "World" (resolved via SUBMODULE_MAP)
+     * - "rhettjs" -> "rhettjs" (barrel)
      */
     private fun extractModuleName(specifier: String): String {
-        return specifier
+        val normalized = normalizeSpecifier(specifier)
+
+        // Check if this is a rhettjs submodule/barrel import
+        if (normalized.startsWith("rhettjs")) {
+            return SUBMODULE_MAP[normalized] ?: normalized
+        }
+
+        // Legacy bare specifier - extract last component
+        return normalized
             .substringAfterLast('/')
             .substringAfterLast(':')
-            .substringBefore('?')
-            .substringBefore('#')
     }
 
     /**
      * Generate ES6 module code for a built-in module.
      * The module exports the API from the global __builtins__ namespace.
+     *
+     * For barrel imports ("rhettjs"), exports all APIs as named exports.
+     * For submodules ("rhettjs/world"), exports the specific API as default.
+     * For legacy ("World"), exports the API as default.
      */
     private fun generateBuiltInModule(name: String): String {
+        // Special handling for barrel import
+        if (name == "rhettjs") {
+            val moduleCode = """
+                // RhettJS Barrel Module
+                // Generated by RhettJSFileSystem
+                // Note: Runtime is global (like window or process), not exported
+                export { default as World } from '/__builtins__/World';
+                export { default as Commands } from '/__builtins__/Commands';
+                export { default as Server } from '/__builtins__/Server';
+                export { default as Store } from '/__builtins__/Store';
+                export { default as NBT } from '/__builtins__/NBT';
+                export { default as StructureNbt } from '/__builtins__/StructureNbt';
+                export { default as LargeStructureNbt } from '/__builtins__/LargeStructureNbt';
+                export { default as Script } from '/__builtins__/Script';
+            """.trimIndent()
+            ConfigManager.debug("Generated barrel module for 'rhettjs':\n$moduleCode")
+            return moduleCode
+        }
+
+        // Standard module export (legacy and submodules)
         val moduleCode = """
             // Built-in module: $name
             // Generated by RhettJSFileSystem

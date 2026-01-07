@@ -91,7 +91,8 @@ object GraalEngine {
         // Reset managers (they will get new context references when context is recreated)
         com.rhett.rhettjs.events.ServerEventManager.reset()
         com.rhett.rhettjs.world.WorldManager.reset()
-        com.rhett.rhettjs.structure.StructureManager.reset()
+        com.rhett.rhettjs.structure.StructureNbtManager.reset()
+        com.rhett.rhettjs.structure.LargeStructureNbtManager.reset()
 
         ConfigManager.debug("GraalVM engine reset (context closed, will be recreated)")
     }
@@ -196,7 +197,8 @@ object GraalEngine {
                 // Set context reference in managers
                 com.rhett.rhettjs.events.ServerEventManager.setContext(newCtx)
                 com.rhett.rhettjs.world.WorldManager.setContext(newCtx)
-                com.rhett.rhettjs.structure.StructureManager.setContext(newCtx)
+                com.rhett.rhettjs.structure.StructureNbtManager.setContext(newCtx)
+                com.rhett.rhettjs.structure.LargeStructureNbtManager.setContext(newCtx)
                 ConfigManager.debug("Created shared GraalVM context with pre-compiled helpers and built-in APIs")
             }
         }
@@ -995,35 +997,36 @@ object GraalEngine {
     }
 
     /**
-     * Create Structure API proxy for JavaScript.
-     * All methods return Promises (async file I/O and world operations).
-     * Delegates to StructureManager for actual implementation.
+     * Create StructureNbt API proxy for JavaScript.
+     * Handles single .nbt template files.
+     * All methods return Promises except for properties.
+     * Delegates to StructureNbtManager for actual implementation.
      */
-    private fun createStructureAPIProxy(): ProxyObject {
+    private fun createStructureNbtAPIProxy(): ProxyObject {
         val context = getOrCreateContext()
 
         return ProxyObject.fromMap(mapOf(
-            // File operations (async) - delegate to StructureManager
+            // File operations (async)
             "exists" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
                     return@ProxyExecutable createRejectedPromise(context, "exists() requires a structure name")
                 }
                 val name = args[0].asString()
-                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.exists(name))
+                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureNbtManager.exists(name))
             },
             "list" to ProxyExecutable { args ->
                 val namespace = if (args.isNotEmpty()) args[0].asString() else null
-                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.list(namespace))
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureNbtManager.list(namespace))
             },
             "remove" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
                     return@ProxyExecutable createRejectedPromise(context, "remove() requires a structure name")
                 }
                 val name = args[0].asString()
-                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.remove(name))
+                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureNbtManager.remove(name))
             },
 
-            // Structure operations (async) - delegate to StructureManager
+            // Structure operations (async)
             "capture" to ProxyExecutable { args ->
                 if (args.size < 3) {
                     return@ProxyExecutable createRejectedPromise(context, "capture() requires pos1, pos2, and name")
@@ -1032,7 +1035,7 @@ object GraalEngine {
                 val pos2 = args[1]
                 val name = args[2].asString()
                 val options = if (args.size > 3) args[3] else null
-                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.capture(pos1, pos2, name, options))
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureNbtManager.capture(pos1, pos2, name, options))
             },
             "place" to ProxyExecutable { args ->
                 if (args.size < 2) {
@@ -1041,46 +1044,14 @@ object GraalEngine {
                 val position = args[0]
                 val name = args[1].asString()
                 val options = if (args.size > 2) args[2] else null
-                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.place(position, name, options))
-            },
-
-            // Large structure operations (async)
-            "captureLarge" to ProxyExecutable { args ->
-                if (args.size < 3) {
-                    return@ProxyExecutable createRejectedPromise(context, "captureLarge() requires pos1, pos2, and name")
-                }
-                val pos1 = args[0]
-                val pos2 = args[1]
-                val name = args[2].asString()
-                val options = if (args.size > 3) args[3] else null
-                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.captureLarge(pos1, pos2, name, options))
-            },
-            "placeLarge" to ProxyExecutable { args ->
-                if (args.size < 2) {
-                    return@ProxyExecutable createRejectedPromise(context, "placeLarge() requires position and name")
-                }
-                val position = args[0]
-                val name = args[1].asString()
-                val options = if (args.size > 2) args[2] else null
-                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.placeLarge(position, name, options))
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureNbtManager.place(position, name, options))
             },
             "getSize" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
                     return@ProxyExecutable createRejectedPromise(context, "getSize() requires a structure name")
                 }
                 val name = args[0].asString()
-                convertFutureToPromise<Map<String, Int>>(context, com.rhett.rhettjs.structure.StructureManager.getSize(name))
-            },
-            "listLarge" to ProxyExecutable { args ->
-                val namespace = if (args.isNotEmpty()) args[0].asString() else null
-                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.listLarge(namespace))
-            },
-            "removeLarge" to ProxyExecutable { args ->
-                if (args.isEmpty()) {
-                    return@ProxyExecutable createRejectedPromise(context, "removeLarge() requires a structure name")
-                }
-                val name = args[0].asString()
-                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.StructureManager.removeLarge(name))
+                convertFutureToPromise<Map<String, Int>>(context, com.rhett.rhettjs.structure.StructureNbtManager.getSize(name))
             },
 
             // Block analysis and replacement operations (async)
@@ -1089,14 +1060,14 @@ object GraalEngine {
                     return@ProxyExecutable createRejectedPromise(context, "blocksList() requires a structure name")
                 }
                 val name = args[0].asString()
-                convertFutureToPromise<Map<String, Int>>(context, com.rhett.rhettjs.structure.StructureManager.blocksList(name))
+                convertFutureToPromise<Map<String, Int>>(context, com.rhett.rhettjs.structure.StructureNbtManager.blocksList(name))
             },
             "blocksNamespaces" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
                     return@ProxyExecutable createRejectedPromise(context, "blocksNamespaces() requires a structure name")
                 }
                 val name = args[0].asString()
-                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.blocksNamespaces(name))
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureNbtManager.blocksNamespaces(name))
             },
             "blocksReplace" to ProxyExecutable { args ->
                 if (args.size < 2) {
@@ -1108,19 +1079,7 @@ object GraalEngine {
 
                 @Suppress("UNCHECKED_CAST")
                 val typedMap = replacementMap as Map<String, String>
-                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.blocksReplace(name, typedMap))
-            },
-            "blocksReplaceLarge" to ProxyExecutable { args ->
-                if (args.size < 2) {
-                    return@ProxyExecutable createRejectedPromise(context, "blocksReplaceLarge() requires structure name and replacement map")
-                }
-                val name = args[0].asString()
-                val replacementMap = convertGraalValueToKotlin(args[1]) as? Map<*, *>
-                    ?: return@ProxyExecutable createRejectedPromise(context, "replacementMap must be an object")
-
-                @Suppress("UNCHECKED_CAST")
-                val typedMap = replacementMap as Map<String, String>
-                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.blocksReplaceLarge(name, typedMap))
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureNbtManager.blocksReplace(name, typedMap))
             },
 
             // Backup and restore operations (async)
@@ -1129,7 +1088,7 @@ object GraalEngine {
                     return@ProxyExecutable createRejectedPromise(context, "listBackups() requires a structure name")
                 }
                 val name = args[0].asString()
-                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.listBackups(name))
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureNbtManager.listBackups(name))
             },
             "restoreBackup" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
@@ -1137,22 +1096,89 @@ object GraalEngine {
                 }
                 val name = args[0].asString()
                 val timestamp = if (args.size > 1 && !args[1].isNull) args[1].asString() else null
-                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.restoreBackup(name, timestamp))
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureNbtManager.restoreBackup(name, timestamp))
+            }
+        ))
+    }
+
+    /**
+     * Create LargeStructureNbt API proxy for JavaScript.
+     * Handles multi-chunk .nbt structures stored in rjs-large/ directories.
+     * All methods return Promises except for properties.
+     * Delegates to LargeStructureNbtManager for actual implementation.
+     */
+    private fun createLargeStructureNbtAPIProxy(): ProxyObject {
+        val context = getOrCreateContext()
+
+        return ProxyObject.fromMap(mapOf(
+            // Structure operations (async)
+            "capture" to ProxyExecutable { args ->
+                if (args.size < 3) {
+                    return@ProxyExecutable createRejectedPromise(context, "capture() requires pos1, pos2, and name")
+                }
+                val pos1 = args[0]
+                val pos2 = args[1]
+                val name = args[2].asString()
+                val options = if (args.size > 3) args[3] else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.LargeStructureNbtManager.capture(pos1, pos2, name, options))
             },
-            "listBackupsLarge" to ProxyExecutable { args ->
+            "place" to ProxyExecutable { args ->
+                if (args.size < 2) {
+                    return@ProxyExecutable createRejectedPromise(context, "place() requires position and name")
+                }
+                val position = args[0]
+                val name = args[1].asString()
+                val options = if (args.size > 2) args[2] else null
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.LargeStructureNbtManager.place(position, name, options))
+            },
+            "getSize" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
-                    return@ProxyExecutable createRejectedPromise(context, "listBackupsLarge() requires a structure name")
+                    return@ProxyExecutable createRejectedPromise(context, "getSize() requires a structure name")
                 }
                 val name = args[0].asString()
-                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.StructureManager.listBackupsLarge(name))
+                convertFutureToPromise<Map<String, Int>>(context, com.rhett.rhettjs.structure.LargeStructureNbtManager.getSize(name))
             },
-            "restoreBackupLarge" to ProxyExecutable { args ->
+            "list" to ProxyExecutable { args ->
+                val namespace = if (args.isNotEmpty()) args[0].asString() else null
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.LargeStructureNbtManager.list(namespace))
+            },
+            "remove" to ProxyExecutable { args ->
                 if (args.isEmpty()) {
-                    return@ProxyExecutable createRejectedPromise(context, "restoreBackupLarge() requires a structure name")
+                    return@ProxyExecutable createRejectedPromise(context, "remove() requires a structure name")
+                }
+                val name = args[0].asString()
+                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.LargeStructureNbtManager.remove(name))
+            },
+
+            // Block operations (async)
+            "blocksReplace" to ProxyExecutable { args ->
+                if (args.size < 2) {
+                    return@ProxyExecutable createRejectedPromise(context, "blocksReplace() requires structure name and replacement map")
+                }
+                val name = args[0].asString()
+                val replacementMap = convertGraalValueToKotlin(args[1]) as? Map<*, *>
+                    ?: return@ProxyExecutable createRejectedPromise(context, "replacementMap must be an object")
+
+                @Suppress("UNCHECKED_CAST")
+                val typedMap = replacementMap as Map<String, String>
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.LargeStructureNbtManager.blocksReplace(name, typedMap))
+            },
+
+            // Backup and restore operations (async)
+            "listBackups" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "listBackups() requires a structure name")
+                }
+                val name = args[0].asString()
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.LargeStructureNbtManager.listBackups(name))
+            },
+            "restoreBackup" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "restoreBackup() requires a structure name")
                 }
                 val name = args[0].asString()
                 val timestamp = if (args.size > 1 && !args[1].isNull) args[1].asString() else null
-                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.StructureManager.restoreBackupLarge(name, timestamp))
+                convertFutureToPromise<Void>(context, com.rhett.rhettjs.structure.LargeStructureNbtManager.restoreBackup(name, timestamp))
             }
         ))
     }
@@ -1725,7 +1751,8 @@ object GraalEngine {
     private fun injectBuiltinModules(bindings: Value) {
         // Create all API bindings
         val worldAPI = createWorldAPIProxy()
-        val structureAPI = createStructureAPIProxy()
+        val structureNbtAPI = createStructureNbtAPIProxy()
+        val largeStructureNbtAPI = createLargeStructureNbtAPIProxy()
         val nbtAPI = createNBTAPIProxy()
         val storeAPI = createStoreAPIProxy()
         val serverAPI = createServerAPIProxy()
@@ -1733,7 +1760,8 @@ object GraalEngine {
 
         // Put each API directly on globalThis for virtual module access
         bindings.putMember("__builtin_World", worldAPI)
-        bindings.putMember("__builtin_Structure", structureAPI)
+        bindings.putMember("__builtin_StructureNbt", structureNbtAPI)
+        bindings.putMember("__builtin_LargeStructureNbt", largeStructureNbtAPI)
         bindings.putMember("__builtin_Store", storeAPI)
         bindings.putMember("__builtin_NBT", nbtAPI)
         bindings.putMember("__builtin_Server", serverAPI)

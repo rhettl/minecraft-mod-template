@@ -5,7 +5,8 @@
  * Tests Large Structure API operations including captureLarge, placeLarge, getSize, listLarge, deleteLarge
  */
 
-import Structure from 'Structure';
+import StructureNbt from 'StructureNbt';
+import LargeStructureNbt from 'LargeStructureNbt';
 import World from 'World';
 
 console.log('=== Large Structure API Integration Test ===');
@@ -81,9 +82,9 @@ async function runTests() {
         console.log('✓ Created 100x50x100 test structure');
 
         // Test 2: Capture as large structure (default 48x48x48 pieces)
-        console.log('\n[Test 2] Structure.captureLarge() - default piece size (48x48x48)');
+        console.log('\n[Test 2] LargeStructureNbt.capture() - default piece size (48x48x48)');
         const largeName = 'test:large_test';
-        await Structure.captureLarge(
+        await LargeStructureNbt.capture(
             { x: structureX, y: testY, z: structureZ },
             { x: structureX + sizeX - 1, y: testY + sizeY - 1, z: structureZ + sizeZ - 1 },
             largeName,
@@ -93,8 +94,8 @@ async function runTests() {
         console.log('  Expected pieces: ~6 pieces (3x2x3 grid with 48x48x48 chunks)');
 
         // Test 3: List large structures
-        console.log('\n[Test 3] Structure.listLarge()');
-        const largeStructures = await Structure.listLarge();
+        console.log('\n[Test 3] LargeStructureNbt.list()');
+        const largeStructures = await LargeStructureNbt.list();
         console.log(`Found ${largeStructures.length} large structures:`);
         largeStructures.forEach(name => console.log(`  - ${name}`));
 
@@ -105,15 +106,15 @@ async function runTests() {
         }
 
         // Test 4: List large structures with namespace filter
-        console.log('\n[Test 4] Structure.listLarge("test")');
-        const testLargeStructures = await Structure.listLarge('test');
+        console.log('\n[Test 4] LargeStructureNbt.list("test")');
+        const testLargeStructures = await LargeStructureNbt.list('test');
         console.log(`Found ${testLargeStructures.length} large structures in "test" namespace:`);
         testLargeStructures.forEach(name => console.log(`  - ${name}`));
         console.log('✓ Namespace filter works');
 
         // Test 5: Get size of large structure
-        console.log('\n[Test 5] Structure.getSize() - large structure');
-        const largeSize = await Structure.getSize(largeName);
+        console.log('\n[Test 5] LargeStructureNbt.getSize() - large structure');
+        const largeSize = await LargeStructureNbt.getSize(largeName);
         console.log(`Large structure size: ${largeSize.x}x${largeSize.y}x${largeSize.z}`);
 
         if (largeSize.x === sizeX && largeSize.y === sizeY && largeSize.z === sizeZ) {
@@ -123,33 +124,33 @@ async function runTests() {
         }
 
         // Test 6: Create a regular (small) structure for size comparison
-        console.log('\n[Test 6] Structure.getSize() - regular structure');
+        console.log('\n[Test 6] StructureNbt.getSize() - regular structure');
         const smallName = 'test:small_test';
-        await Structure.capture(
+        await StructureNbt.capture(
             { x: structureX, y: testY, z: structureZ },
             { x: structureX + 4, y: testY + 4, z: structureZ + 4 },
             smallName
         );
 
-        const smallSize = await Structure.getSize(smallName);
+        const smallSize = await StructureNbt.getSize(smallName);
         console.log(`Regular structure size: ${smallSize.x}x${smallSize.y}x${smallSize.z}`);
         console.log('✓ getSize() works for both regular and large structures');
 
         // Test 7: Place large structure at new location (no rotation)
-        console.log('\n[Test 7] Structure.placeLarge() - No rotation');
+        console.log('\n[Test 7] LargeStructureNbt.place() - No rotation');
         const placeX1 = testX + 120;
         const placeZ1 = testZ;
-        await Structure.placeLarge(
+        await LargeStructureNbt.place(
             { x: placeX1, y: testY, z: placeZ1 },
             largeName
         );
         console.log(`✓ Placed large structure at ${placeX1}, ${testY}, ${placeZ1}`);
 
         // Test 8: Place large structure with 90° rotation
-        console.log('\n[Test 8] Structure.placeLarge() - 90° rotation');
+        console.log('\n[Test 8] LargeStructureNbt.place() - 90° rotation');
         const placeX2 = testX + 250;
         const placeZ2 = testZ;
-        await Structure.placeLarge(
+        await LargeStructureNbt.place(
             { x: placeX2, y: testY, z: placeZ2 },
             largeName,
             { rotation: 90 }
@@ -157,7 +158,7 @@ async function runTests() {
         console.log(`✓ Placed large structure at ${placeX2}, ${testY}, ${placeZ2} (90° rotation)`);
 
         // Test 9: Place large structure centered
-        console.log('\n[Test 9] Structure.placeLarge() - Centered');
+        console.log('\n[Test 9] LargeStructureNbt.place() - Centered');
         const placeX3 = testX + 180;
         const placeZ3 = testZ + 180;
         // Add marker below to see center point
@@ -165,7 +166,7 @@ async function runTests() {
             { x: placeX3, y: testY - 1, z: placeZ3 },
             'minecraft:emerald_block'
         );
-        await Structure.placeLarge(
+        await LargeStructureNbt.place(
             { x: placeX3, y: testY, z: placeZ3 },
             largeName,
             { centered: true }
@@ -173,9 +174,9 @@ async function runTests() {
         console.log(`✓ Placed large structure at ${placeX3}, ${testY}, ${placeZ3} (centered)`);
 
         // Test 10: Capture with custom piece size
-        console.log('\n[Test 10] Structure.captureLarge() - custom piece size (30x30x30)');
+        console.log('\n[Test 10] LargeStructureNbt.capture() - custom piece size (30x30x30)');
         const customName = 'test:custom_pieces';
-        await Structure.captureLarge(
+        await LargeStructureNbt.capture(
             { x: structureX, y: testY, z: structureZ },
             { x: structureX + sizeX - 1, y: testY + sizeY - 1, z: structureZ + sizeZ - 1 },
             customName,
@@ -186,7 +187,7 @@ async function runTests() {
 
         // Test 11: Verify custom piece size getSize
         console.log('\n[Test 11] Verify custom piece structure size');
-        const customSize = await Structure.getSize(customName);
+        const customSize = await LargeStructureNbt.getSize(customName);
         console.log(`Custom piece structure size: ${customSize.x}x${customSize.y}x${customSize.z}`);
 
         if (customSize.x === sizeX && customSize.y === sizeY && customSize.z === sizeZ) {
@@ -195,23 +196,23 @@ async function runTests() {
             console.log(`✗ Size mismatch! Expected ${sizeX}x${sizeY}x${sizeZ}`);
         }
 
-        // Test 12: Delete large structures
-        console.log('\n[Test 12] Structure.deleteLarge()');
-        const deleted1 = await Structure.deleteLarge(largeName);
-        console.log(`Deleted "${largeName}": ${deleted1}`);
+        // Test 12: Remove large structures
+        console.log('\n[Test 12] LargeStructureNbt.remove()');
+        const deleted1 = await LargeStructureNbt.remove(largeName);
+        console.log(`Removed "${largeName}": ${deleted1}`);
 
-        const deleted2 = await Structure.deleteLarge(customName);
-        console.log(`Deleted "${customName}": ${deleted2}`);
+        const deleted2 = await LargeStructureNbt.remove(customName);
+        console.log(`Removed "${customName}": ${deleted2}`);
 
         if (deleted1 && deleted2) {
-            console.log('✓ Large structures deleted successfully');
+            console.log('✓ Large structures removed successfully');
         } else {
-            console.log('✗ Failed to delete some large structures');
+            console.log('✗ Failed to remove some large structures');
         }
 
-        // Test 13: Verify deletion
-        console.log('\n[Test 13] Verifying deletion');
-        const largeListAfter = await Structure.listLarge();
+        // Test 13: Verify removal
+        console.log('\n[Test 13] Verifying removal');
+        const largeListAfter = await LargeStructureNbt.list();
         const stillExists = largeListAfter.includes(largeName);
 
         if (!stillExists) {
@@ -220,9 +221,9 @@ async function runTests() {
             console.log(`✗ Large structure "${largeName}" still in list (unexpected)`);
         }
 
-        // Test 14: Delete non-existent large structure
-        console.log('\n[Test 14] Deleting non-existent large structure');
-        const deletedNonExistent = await Structure.deleteLarge('test:nonexistent');
+        // Test 14: Remove non-existent large structure
+        console.log('\n[Test 14] Removing non-existent large structure');
+        const deletedNonExistent = await LargeStructureNbt.remove('test:nonexistent');
         if (!deletedNonExistent) {
             console.log('✓ Correctly returned false for non-existent large structure');
         } else {
@@ -230,7 +231,7 @@ async function runTests() {
         }
 
         // Clean up regular structure
-        await Structure.delete(smallName);
+        await StructureNbt.remove(smallName);
 
         // Summary
         console.log('\n=== Test Summary ===');
@@ -242,7 +243,7 @@ async function runTests() {
         console.log(`  - Placement (90°) at ${placeX2}, ${testY}, ${placeZ2}`);
         console.log(`  - Placement (centered) at ${placeX3}, ${testY}, ${placeZ3}`);
         console.log('');
-        console.log('Note: Test large structures were deleted after verification');
+        console.log('Note: Test large structures were removed after verification');
         console.log('Placed structures remain for visual inspection');
 
     } catch (error) {

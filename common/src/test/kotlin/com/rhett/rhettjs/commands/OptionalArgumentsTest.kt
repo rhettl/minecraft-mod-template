@@ -41,7 +41,7 @@ class OptionalArgumentsTest {
         dispatcher = CommandDispatcher()
 
         // Mock CommandBuildContext
-        buildContext = Mockito.mock(CommandBuildContext.class.java)
+        buildContext = Mockito.mock(CommandBuildContext::class.java)
         val holderLookup = Mockito.mock(HolderLookup.Provider::class.java)
         Mockito.`when`(buildContext.lookupOrThrow(Mockito.any())).thenReturn(holderLookup)
 

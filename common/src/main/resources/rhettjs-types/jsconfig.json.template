@@ -5,13 +5,19 @@
     "checkJs": false,
     "allowJs": true,
     "noEmit": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "rhettjs": ["./__types/rhettjs.d.ts"],
+      "rhettjs/*": ["./__types/*.d.ts"]
+    }
   },
   "include": [
     "scripts/**/*.js",
     "server/**/*.js",
     "startup/**/*.js",
-    "globals/**/*.js"
+    "globals/**/*.js",
+    "__types/**/*.d.ts"
   ],
   "exclude": [
     "node_modules"

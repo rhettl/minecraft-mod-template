@@ -1,14 +1,14 @@
 /**
- * Structure API Integration Test
+ * StructureNbt API Integration Test
  * Run with: /rjs run test-structure -x=<x> -z=<z>
  *
- * Tests Structure API operations including capture, place, list, exists, delete
+ * Tests StructureNbt API operations including capture, place, list, exists, delete
  */
 
-import Structure from 'Structure';
+import StructureNbt from 'StructureNbt';
 import World from 'World';
 
-console.log('=== Structure API Integration Test ===');
+console.log('=== StructureNbt API Integration Test ===');
 
 // Parse arguments using named flags
 const testX = Script.argv.get('x');
@@ -49,9 +49,9 @@ async function runTests() {
         console.log('✓ Created 3x3x3 test structure');
 
         // Test 2: Capture the structure
-        console.log('\n[Test 2] Structure.capture()');
+        console.log('\n[Test 2] StructureNbt.capture()');
         const structureName = 'test:cube';
-        await Structure.capture(
+        await StructureNbt.capture(
             { x: structureX, y: testY, z: structureZ },
             { x: structureX + 2, y: testY + 2, z: structureZ + 2 },
             structureName,
@@ -60,46 +60,46 @@ async function runTests() {
         console.log(`✓ Captured structure as "${structureName}"`);
 
         // Test 3: Check if structure exists
-        console.log('\n[Test 3] Structure.exists()');
-        const exists = await Structure.exists(structureName);
+        console.log('\n[Test 3] StructureNbt.exists()');
+        const exists = await StructureNbt.exists(structureName);
         if (exists) {
-            console.log(`✓ Structure "${structureName}" exists`);
+            console.log(`✓ StructureNbt "${structureName}" exists`);
         } else {
-            console.log(`✗ Structure "${structureName}" does not exist (unexpected)`);
+            console.log(`✗ StructureNbt "${structureName}" does not exist (unexpected)`);
             Runtime.exit();
         }
 
         // Test 4: List structures
-        console.log('\n[Test 4] Structure.list()');
-        const allStructures = await Structure.list();
-        console.log(`Found ${allStructures.length} structures:`);
-        allStructures.forEach(name => console.log(`  - ${name}`));
+        console.log('\n[Test 4] StructureNbt.list()');
+        const allStructureNbts = await StructureNbt.list();
+        console.log(`Found ${allStructureNbts.length} structures:`);
+        allStructureNbts.forEach(name => console.log(`  - ${name}`));
 
-        if (allStructures.includes(structureName)) {
+        if (allStructureNbts.includes(structureName)) {
             console.log(`✓ "${structureName}" appears in list`);
         } else {
             console.log(`✗ "${structureName}" not in list (unexpected)`);
         }
 
         // Test 5: List structures with namespace filter
-        console.log('\n[Test 5] Structure.list("test")');
-        const testStructures = await Structure.list('test');
-        console.log(`Found ${testStructures.length} structures in "test" namespace:`);
-        testStructures.forEach(name => console.log(`  - ${name}`));
+        console.log('\n[Test 5] StructureNbt.list("test")');
+        const testStructureNbts = await StructureNbt.list('test');
+        console.log(`Found ${testStructureNbts.length} structures in "test" namespace:`);
+        testStructureNbts.forEach(name => console.log(`  - ${name}`));
         console.log('✓ Namespace filter works');
 
         // Test 6: Place structure at new location (no rotation)
-        console.log('\n[Test 6] Structure.place() - No rotation');
+        console.log('\n[Test 6] StructureNbt.place() - No rotation');
         const placeX1 = testX + 10;
         const placeZ1 = testZ;
-        await Structure.place(
+        await StructureNbt.place(
             { x: placeX1, y: testY, z: placeZ1 },
             structureName
         );
         console.log(`✓ Placed structure at ${placeX1}, ${testY}, ${placeZ1}`);
 
         // Test 7: Place structure with 90° rotation
-        console.log('\n[Test 7] Structure.place() - 90° rotation');
+        console.log('\n[Test 7] StructureNbt.place() - 90° rotation');
         const placeX2 = testX + 20;
         const placeZ2 = testZ;
         // Add a diamond block marker below start
@@ -107,7 +107,7 @@ async function runTests() {
           { x: placeX2, y: testY-1, z: placeZ2 },
           'minecraft:diamond_block'
         );
-        await Structure.place(
+        await StructureNbt.place(
             { x: placeX2, y: testY, z: placeZ2 },
             structureName,
             { rotation: 90 }
@@ -115,7 +115,7 @@ async function runTests() {
         console.log(`✓ Placed structure at ${placeX2}, ${testY}, ${placeZ2} (90° rotation)`);
 
         // Test 8: Place structure with 180° rotation
-        console.log('\n[Test 8] Structure.place() - 180° rotation');
+        console.log('\n[Test 8] StructureNbt.place() - 180° rotation');
         const placeX3 = testX + 30;
         const placeZ3 = testZ;
         // Add a diamond block marker below start
@@ -123,7 +123,7 @@ async function runTests() {
           { x: placeX3, y: testY-1, z: placeZ3 },
           'minecraft:diamond_block'
         );
-        await Structure.place(
+        await StructureNbt.place(
             { x: placeX3, y: testY, z: placeZ3 },
             structureName,
             { rotation: 180 }
@@ -131,7 +131,7 @@ async function runTests() {
         console.log(`✓ Placed structure at ${placeX3}, ${testY}, ${placeZ3} (180° rotation)`);
 
         // Test 9: Place structure with 270° rotation
-        console.log('\n[Test 9] Structure.place() - 270° rotation');
+        console.log('\n[Test 9] StructureNbt.place() - 270° rotation');
         const placeX4 = testX + 40;
         const placeZ4 = testZ;
         // Add a diamond block marker below start
@@ -139,7 +139,7 @@ async function runTests() {
           { x: placeX4, y: testY-1, z: placeZ4 },
           'minecraft:diamond_block'
         );
-        await Structure.place(
+        await StructureNbt.place(
             { x: placeX4, y: testY, z: placeZ4 },
             structureName,
             { rotation: 270 }
@@ -147,7 +147,7 @@ async function runTests() {
         console.log(`✓ Placed structure at ${placeX4}, ${testY}, ${placeZ4} (270° rotation)`);
 
         // Test 10: Place structure centered
-        console.log('\n[Test 10] Structure.place() - Centered');
+        console.log('\n[Test 10] StructureNbt.place() - Centered');
         const placeX5 = testX + 50;
         const placeZ5 = testZ;
         // Add a diamond block marker below start
@@ -155,7 +155,7 @@ async function runTests() {
           { x: placeX5, y: testY-1, z: placeZ5 },
           'minecraft:diamond_block'
         );
-        await Structure.place(
+        await StructureNbt.place(
             { x: placeX5, y: testY, z: placeZ5 },
             structureName,
             { centered: true }
@@ -190,7 +190,7 @@ async function runTests() {
         );
 
         const stairsName = 'test:stairs';
-        await Structure.capture(
+        await StructureNbt.capture(
             { x: stairX, y: testY, z: stairZ },
             { x: stairX + 1, y: testY, z: stairZ + 1 },
             stairsName
@@ -199,39 +199,39 @@ async function runTests() {
 
         // Test 12: Place stairs with rotation to verify property rotation
         console.log('\n[Test 12] Placing stairs with rotation');
-        await Structure.place(
+        await StructureNbt.place(
             { x: stairX, y: testY, z: stairZ + 5 },
             stairsName,
             { rotation: 90 }
         );
         console.log('✓ Placed rotated stairs structure');
 
-        // Test 13: Delete structures
-        console.log('\n[Test 13] Structure.delete()');
-        const deleted1 = await Structure.delete(structureName);
-        console.log(`Deleted "${structureName}": ${deleted1}`);
+        // Test 13: Remove structures
+        console.log('\n[Test 13] StructureNbt.remove()');
+        const deleted1 = await StructureNbt.remove(structureName);
+        console.log(`Removed "${structureName}": ${deleted1}`);
 
-        const deleted2 = await Structure.delete(stairsName);
-        console.log(`Deleted "${stairsName}": ${deleted2}`);
+        const deleted2 = await StructureNbt.remove(stairsName);
+        console.log(`Removed "${stairsName}": ${deleted2}`);
 
         if (deleted1 && deleted2) {
-            console.log('✓ Structures deleted successfully');
+            console.log('✓ StructureNbts removed successfully');
         } else {
-            console.log('✗ Failed to delete some structures');
+            console.log('✗ Failed to remove some structures');
         }
 
-        // Test 14: Verify deletion
-        console.log('\n[Test 14] Verifying deletion');
-        const existsAfter = await Structure.exists(structureName);
+        // Test 14: Verify removal
+        console.log('\n[Test 14] Verifying removal');
+        const existsAfter = await StructureNbt.exists(structureName);
         if (!existsAfter) {
-            console.log(`✓ Structure "${structureName}" no longer exists`);
+            console.log(`✓ StructureNbt "${structureName}" no longer exists`);
         } else {
-            console.log(`✗ Structure "${structureName}" still exists (unexpected)`);
+            console.log(`✗ StructureNbt "${structureName}" still exists (unexpected)`);
         }
 
-        // Test 15: Try to delete non-existent structure
-        console.log('\n[Test 15] Deleting non-existent structure');
-        const deletedNonExistent = await Structure.delete('test:nonexistent');
+        // Test 15: Try to remove non-existent structure
+        console.log('\n[Test 15] Removing non-existent structure');
+        const deletedNonExistent = await StructureNbt.remove('test:nonexistent');
         if (!deletedNonExistent) {
             console.log('✓ Correctly returned false for non-existent structure');
         } else {
@@ -240,9 +240,9 @@ async function runTests() {
 
         // Summary
         console.log('\n=== Test Summary ===');
-        console.log('All Structure API tests completed successfully!');
+        console.log('All StructureNbt API tests completed successfully!');
         console.log(`Test structures created at: ${testX}, ${testY}, ${testZ}`);
-        console.log('Structures:');
+        console.log('StructureNbts:');
         console.log(`  - Original 3x3x3 cube at ${structureX}, ${testY}, ${structureZ}`);
         console.log(`  - Placement (no rotation) at ${placeX1}, ${testY}, ${placeZ1}`);
         console.log(`  - Placement (90°) at ${placeX2}, ${testY}, ${placeZ2}`);
@@ -252,7 +252,7 @@ async function runTests() {
         console.log(`  - Original stairs at ${stairX}, ${testY}, ${stairZ}`);
         console.log(`  - Rotated stairs at ${stairX}, ${testY}, ${stairZ + 5}`);
         console.log('');
-        console.log('Note: Test structures were deleted after verification');
+        console.log('Note: Test structures were removed after verification');
 
     } catch (error) {
         console.error(`Test failed: ${error.message}`);

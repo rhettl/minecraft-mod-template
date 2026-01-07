@@ -18,9 +18,14 @@ import java.nio.file.Path
  * IMPORTANT: When adding new API methods to GraalEngine, update:
  * 1. GraalEngine.createXAPIProxy() - The actual runtime binding
  * 2. getRuntimeMethods() in this test - Expected method list
- * 3. common/src/main/resources/rhettjs-types/rhettjs.d.ts - Type definitions
+ * 3. common/src/main/resources/rhettjs-types/<api>.d.ts - Type definitions (e.g., world.d.ts, commands.d.ts)
  *
  * If any of these are out of sync, this test will fail.
+ *
+ * Note: TypeScript definitions are now modular:
+ * - Each API has its own .d.ts file (world.d.ts, commands.d.ts, etc.)
+ * - rhettjs.d.ts is a barrel file that re-exports all APIs
+ * - This enables both `import {World} from "rhettjs"` and `import World from "rhettjs/world"`
  */
 class APITypeValidationTest {
 
@@ -36,14 +41,28 @@ class APITypeValidationTest {
 
     /**
      * Parse .d.ts file to extract declared method names for an API.
-     * @param apiName The namespace name (e.g., "Structure", "World")
+     * Reads from individual API files (e.g., /rhettjs-types/world.d.ts)
+     * @param apiName The namespace name (e.g., "StructureNbt", "World")
      * @return Sorted list of method names
      */
     private fun parseTypeDefinitions(apiName: String): List<String> {
-        val dtsContent = javaClass.getResourceAsStream("/rhettjs-types/rhettjs.d.ts")
+        // Map API name to its file
+        val fileName = when (apiName) {
+            "StructureNbt", "LargeStructureNbt" -> "structure.d.ts"
+            "World" -> "world.d.ts"
+            "Commands" -> "commands.d.ts"
+            "Server" -> "server.d.ts"
+            "Store" -> "store.d.ts"
+            "NBT" -> "nbt.d.ts"
+            "Runtime" -> "runtime.d.ts"
+            "Script" -> "script.d.ts"
+            else -> throw IllegalArgumentException("Unknown API: $apiName")
+        }
+
+        val dtsContent = javaClass.getResourceAsStream("/rhettjs-types/$fileName")
             ?.bufferedReader()
             ?.readText()
-            ?: throw IllegalStateException("Type definitions not found at /rhettjs-types/rhettjs.d.ts")
+            ?: throw IllegalStateException("Type definitions not found at /rhettjs-types/$fileName")
 
         // Extract the API block: "declare namespace ApiName { ... }"
         val namespacePattern = """declare\s+namespace\s+$apiName\s*\{""".toRegex()
@@ -103,7 +122,7 @@ class APITypeValidationTest {
         val builtinName = when (apiName) {
             "Runtime" -> "Runtime"
             "Console" -> "console"  // Special case: lowercase
-            "Structure", "World", "Commands", "Server", "Store", "NBT" -> "__builtin_$apiName"
+            "StructureNbt", "LargeStructureNbt", "World", "Commands", "Server", "Store", "NBT", "Script" -> "__builtin_$apiName"
             else -> throw IllegalArgumentException("Unknown API: $apiName")
         }
 
@@ -138,15 +157,15 @@ class APITypeValidationTest {
     }
 
     @Test
-    fun `Structure API matches type definitions`() {
-        val expected = parseTypeDefinitions("Structure")
-        val actual = getRuntimeMethods("Structure")
+    fun `StructureNbt API matches type definitions`() {
+        val expected = parseTypeDefinitions("StructureNbt")
+        val actual = getRuntimeMethods("StructureNbt")
 
         assertEquals(
             expected,
             actual,
             """
-            Structure API methods don't match rhettjs.d.ts!
+            StructureNbt API methods don't match structure.d.ts!
 
             Expected (from .d.ts): $expected
             Actual (from runtime): $actual
@@ -154,7 +173,29 @@ class APITypeValidationTest {
             Missing from runtime: ${expected - actual.toSet()}
             Missing from .d.ts: ${actual - expected.toSet()}
 
-            Action: Update common/src/main/resources/rhettjs-types/rhettjs.d.ts
+            Action: Update common/src/main/resources/rhettjs-types/structure.d.ts
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun `LargeStructureNbt API matches type definitions`() {
+        val expected = parseTypeDefinitions("LargeStructureNbt")
+        val actual = getRuntimeMethods("LargeStructureNbt")
+
+        assertEquals(
+            expected,
+            actual,
+            """
+            LargeStructureNbt API methods don't match structure.d.ts!
+
+            Expected (from .d.ts): $expected
+            Actual (from runtime): $actual
+
+            Missing from runtime: ${expected - actual.toSet()}
+            Missing from .d.ts: ${actual - expected.toSet()}
+
+            Action: Update common/src/main/resources/rhettjs-types/structure.d.ts
             """.trimIndent()
         )
     }
@@ -198,7 +239,7 @@ class APITypeValidationTest {
             Missing from runtime: ${expected - actual.toSet()}
             Missing from .d.ts: ${actual - expected.toSet()}
 
-            Action: Update common/src/main/resources/rhettjs-types/rhettjs.d.ts
+            Action: Update common/src/main/resources/rhettjs-types/store.d.ts
             """.trimIndent()
         )
     }
@@ -220,7 +261,7 @@ class APITypeValidationTest {
             Missing from runtime: ${expected - actual.toSet()}
             Missing from .d.ts: ${actual - expected.toSet()}
 
-            Action: Update common/src/main/resources/rhettjs-types/rhettjs.d.ts
+            Action: Update common/src/main/resources/rhettjs-types/commands.d.ts
             """.trimIndent()
         )
     }
@@ -242,7 +283,7 @@ class APITypeValidationTest {
             Missing from runtime: ${expected - actual.toSet()}
             Missing from .d.ts: ${actual - expected.toSet()}
 
-            Action: Update common/src/main/resources/rhettjs-types/rhettjs.d.ts
+            Action: Update common/src/main/resources/rhettjs-types/server.d.ts
             """.trimIndent()
         )
     }
@@ -264,7 +305,7 @@ class APITypeValidationTest {
             Missing from runtime: ${expected - actual.toSet()}
             Missing from .d.ts: ${actual - expected.toSet()}
 
-            Action: Update common/src/main/resources/rhettjs-types/rhettjs.d.ts
+            Action: Update common/src/main/resources/rhettjs-types/nbt.d.ts
             """.trimIndent()
         )
     }
@@ -286,20 +327,35 @@ class APITypeValidationTest {
             Missing from runtime: ${expected - actual.toSet()}
             Missing from .d.ts: ${actual - expected.toSet()}
 
-            Action: Update common/src/main/resources/rhettjs-types/rhettjs.d.ts
+            Action: Update common/src/main/resources/rhettjs-types/runtime.d.ts
             """.trimIndent()
         )
     }
 
     @Test
-    fun `type definitions file exists and is readable`() {
-        val dtsContent = javaClass.getResourceAsStream("/rhettjs-types/rhettjs.d.ts")
+    fun `type definitions files exist and are readable`() {
+        // Check barrel file
+        val barrelContent = javaClass.getResourceAsStream("/rhettjs-types/rhettjs.d.ts")
             ?.bufferedReader()
             ?.readText()
+        assertNotNull(barrelContent, "rhettjs.d.ts barrel file should be present in resources")
 
-        assertNotNull(dtsContent, "rhettjs.d.ts should be present in resources")
-        assertTrue(dtsContent!!.contains("declare namespace Structure"), "Should contain Structure API")
-        assertTrue(dtsContent.contains("declare namespace World"), "Should contain World API")
-        assertTrue(dtsContent.contains("declare namespace Commands"), "Should contain Commands API")
+        // Check individual API files
+        val apiFiles = listOf("world.d.ts", "commands.d.ts", "server.d.ts", "structure.d.ts",
+                              "store.d.ts", "nbt.d.ts", "runtime.d.ts", "script.d.ts", "types.d.ts")
+
+        for (file in apiFiles) {
+            val content = javaClass.getResourceAsStream("/rhettjs-types/$file")
+                ?.bufferedReader()
+                ?.readText()
+            assertNotNull(content, "$file should be present in resources")
+        }
+
+        // Verify structure.d.ts contains both APIs
+        val structureContent = javaClass.getResourceAsStream("/rhettjs-types/structure.d.ts")
+            ?.bufferedReader()
+            ?.readText()
+        assertTrue(structureContent!!.contains("declare namespace StructureNbt"), "structure.d.ts should contain StructureNbt API")
+        assertTrue(structureContent.contains("declare namespace LargeStructureNbt"), "structure.d.ts should contain LargeStructureNbt API")
     }
 }

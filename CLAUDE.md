@@ -195,36 +195,51 @@ User uses IDE runConfiguration now, but the below still exists.
 
 ## TypeScript Definitions & IDE Support
 
-RhettJS provides TypeScript definitions for all JavaScript APIs to enable IDE autocomplete and type checking.
+RhettJS provides modular TypeScript definitions for all JavaScript APIs to enable IDE autocomplete and type checking.
 
-**Location**: `common/src/main/resources/rhettjs-types/rhettjs.d.ts`
+**Location**: `common/src/main/resources/rhettjs-types/`
+- **Modular structure** (2026-01-06): Split into individual API files for better organization
+- `rhettjs.d.ts` - Barrel file (re-exports all APIs)
+- `types.d.ts` - Common types (Position, Block, Player, Caller)
+- Individual API files: `runtime.d.ts`, `world.d.ts`, `commands.d.ts`, `server.d.ts`, `store.d.ts`, `nbt.d.ts`, `structure.d.ts`, `script.d.ts`
 
-**Auto-extraction**: Type definitions are automatically extracted from the mod JAR to `<minecraft>/rjs/__types/` on first load via `FilesystemInitializer`.
+**Auto-extraction**: All type definition files are automatically extracted from the mod JAR to `<minecraft>/rjs/__types/` on first load via `FilesystemInitializer`.
+
+**Import Styles**: RhettJS supports multiple import patterns:
+```javascript
+// Barrel imports (recommended)
+import {World, Commands, StructureNbt} from 'rhettjs';
+
+// Submodule imports
+import World from 'rhettjs/world';
+import Commands from 'rhettjs/commands';
+
+// Legacy bare specifiers (still supported)
+import World from 'World';
+import Commands from 'Commands';
+
+// Runtime is always global (like window or process)
+Runtime.exit();
+console.log(Runtime.env.RJS_VERSION);
+```
 
 **Validation**: `APITypeValidationTest.kt` ensures runtime API methods match TypeScript definitions:
-- Parses .d.ts file to extract declared methods
-- Compares against expected runtime methods (maintained in test)
+- Parses individual .d.ts files to extract declared methods
+- Compares against actual runtime methods via GraalVM introspection
 - Fails build if types drift from runtime
-- 100% strict matching (excluding `_` prefixed private methods)
+- 100% strict matching (excluding `_` prefixed private methods and properties)
 
 **Workflow**:
-1. Add new API method to .d.ts with JSDoc
+1. Add new API method to appropriate `.d.ts` file with JSDoc
 2. Implement method in GraalEngine ProxyObject
 3. Run `./gradlew test` - **automatically validates** .d.ts matches runtime
-4. Copy updated .d.ts to `rjs-test-scripts/__types/` for testing
+4. Types are symlinked from `common/src/main/resources/rhettjs-types/` to `rjs-test-scripts/__types/` (no manual copy needed)
 
-**How validation works**:
-- Test introspects actual GraalVM bindings (via `GraalEngine.getOrCreateContext()`)
-- Extracts actual method names from runtime (`apiObject.memberKeys`)
-- Compares against .d.ts (parsed via regex)
-- Fails if mismatch - **no manual list maintenance required**
-
-**Current status** (2026-01-03):
-- ✅ **ALL APIs validated automatically** - Runtime, Structure, World, Store, Commands, Server, NBT
-- ✅ Test successfully caught and fixed real drift:
-  - Removed unimplemented `Structure.load()` and `Structure.save()`
-  - Removed undocumented `Runtime.inspect()`
-  - Added missing `World.replace()`, `World.getEntities()`, `World.spawnEntity()`
+**Current status** (2026-01-06):
+- ✅ **ALL APIs validated automatically** - Runtime, StructureNbt, LargeStructureNbt, World, Store, Commands, Server, NBT, Script
+- ✅ **Modular structure**: Each API has its own `.d.ts` file
+- ✅ **Multiple import styles**: Barrel, submodule, and legacy imports all supported
+- ✅ **Runtime is global**: No import needed, available everywhere like `console` or `process`
 - Note: Properties (like `Server.tps`, `World.dimensions`) are automatically excluded from validation
 
 **IDE Setup**:

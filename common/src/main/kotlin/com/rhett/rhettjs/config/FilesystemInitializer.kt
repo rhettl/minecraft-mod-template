@@ -70,30 +70,53 @@ object FilesystemInitializer {
 
     /**
      * Extract TypeScript definitions from JAR to __types/ directory.
-     * Only extracts if files are missing.
+     * Extracts all modular type definition files.
      */
     private fun extractTypeDefinitions(rjsRootDir: Path) {
         val typesDir = rjsRootDir.resolve("__types")
-        val targetFile = typesDir.resolve("rhettjs.d.ts")
 
-        // Only extract if missing
-        if (!targetFile.exists()) {
-            try {
-                val resourcePath = "/rhettjs-types/rhettjs.d.ts"
-                val content = javaClass.getResourceAsStream(resourcePath)
-                    ?.bufferedReader()
-                    ?.readText()
+        // List of all type definition files to extract
+        val typeFiles = listOf(
+            "rhettjs.d.ts",          // Barrel file
+            "types.d.ts",            // Common types
+            "runtime.d.ts",          // Runtime API
+            "store.d.ts",            // Store API
+            "nbt.d.ts",              // NBT API
+            "commands.d.ts",         // Commands API
+            "server.d.ts",           // Server API
+            "world.d.ts",            // World API
+            "structure.d.ts",        // Structure APIs
+            "script.d.ts",           // Script API
+            "jsconfig.json.template" // VSCode config template
+        )
 
-                if (content != null) {
-                    targetFile.writeText(content)
-                    ConfigManager.debug("Extracted type definition: rhettjs.d.ts")
-                    RhettJSCommon.LOGGER.info("[RhettJS] Extracted type definitions to __types/")
-                } else {
-                    RhettJSCommon.LOGGER.warn("[RhettJS] Type definition resource not found: $resourcePath")
+        var extractedCount = 0
+        for (fileName in typeFiles) {
+            val targetFile = typesDir.resolve(fileName)
+
+            // Only extract if missing
+            if (!targetFile.exists()) {
+                try {
+                    val resourcePath = "/rhettjs-types/$fileName"
+                    val content = javaClass.getResourceAsStream(resourcePath)
+                        ?.bufferedReader()
+                        ?.readText()
+
+                    if (content != null) {
+                        targetFile.writeText(content)
+                        extractedCount++
+                        ConfigManager.debug("Extracted type definition: $fileName")
+                    } else {
+                        RhettJSCommon.LOGGER.warn("[RhettJS] Type definition resource not found: $resourcePath")
+                    }
+                } catch (e: Exception) {
+                    RhettJSCommon.LOGGER.error("[RhettJS] Failed to extract $fileName", e)
                 }
-            } catch (e: Exception) {
-                RhettJSCommon.LOGGER.error("[RhettJS] Failed to extract rhettjs.d.ts", e)
             }
+        }
+
+        if (extractedCount > 0) {
+            RhettJSCommon.LOGGER.info("[RhettJS] Extracted $extractedCount type definition files to __types/")
         }
     }
 
@@ -106,7 +129,8 @@ object FilesystemInitializer {
         // Only extract if missing
         if (!readmeFile.exists()) {
             try {
-                val content = javaClass.getResourceAsStream("/rhettjs-defaults/__types-README.md")
+                // README is now part of rhettjs-types directory
+                val content = javaClass.getResourceAsStream("/rhettjs-types/README.md")
                     ?.bufferedReader()
                     ?.readText()
 

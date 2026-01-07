@@ -1,1 +1,0 @@
-../../common/src/main/resources/rhettjs-types/rhettjs.d.ts

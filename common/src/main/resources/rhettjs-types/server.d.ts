@@ -1,0 +1,125 @@
+// RhettJS Server API Type Definitions
+// Version: 0.3.0
+// Last updated: 2026-01-06
+
+import { Player, Position, Block } from './types';
+
+/** Available server event types */
+export type ServerEventType =
+    | "playerJoin"
+    | "playerLeave"
+    | "blockLeftClick"
+    | "blockRightClick";
+
+/** Player join event */
+export interface PlayerJoinEvent {
+    player: Player;
+}
+
+/** Player leave event */
+export interface PlayerLeaveEvent {
+    player: Player;
+}
+
+/** Block click event (cancelable) */
+export interface BlockClickEvent {
+    /** Full player object with all methods (sendMessage, teleport, etc.) */
+    player: Player;
+    position: Position;
+    block: Block;
+    face: "up" | "down" | "north" | "south" | "east" | "west" | null;
+    item: {
+        id: string;
+        count: number;
+        displayName: string | null;
+        nbt: Record<string, any> | null;
+    } | null;
+    /** Cancel this event to prevent the default action */
+    cancel(): void;
+}
+
+/** Server event handler */
+export type ServerEventHandler = (event: any) => void | Promise<void>;
+
+/**
+ * Server events and properties
+ * @example
+ * // Using event type constants
+ * Server.on(Server.eventTypes.PLAYER_JOIN, (event) => {
+ *   console.log(`${event.player.name} joined`);
+ * });
+ *
+ * // Or using string literals
+ * Server.on('playerJoin', (event) => {
+ *   console.log(`${event.player.name} joined`);
+ * });
+ *
+ * // Block click events
+ * Server.on(Server.eventTypes.BLOCK_LEFT_CLICK, (event) => {
+ *   console.log(`${event.player.name} left-clicked at ${event.position.x}, ${event.position.y}, ${event.position.z}`);
+ * });
+ */
+declare namespace Server {
+    /** Event type constants for type-safe event registration */
+    const eventTypes: {
+        PLAYER_JOIN: "playerJoin";
+        PLAYER_LEAVE: "playerLeave";
+        BLOCK_LEFT_CLICK: "blockLeftClick";
+        BLOCK_RIGHT_CLICK: "blockRightClick";
+    };
+
+    /** Current TPS (ticks per second) */
+    const tps: number;
+
+    /** Online players count */
+    const players: number;
+
+    /** Maximum players allowed */
+    const maxPlayers: number;
+
+    /** Server MOTD (message of the day) */
+    const motd: string;
+
+    /**
+     * Register event handler
+     * @param event - Event name (use Server.eventTypes for constants)
+     * @param handler - Event handler
+     * @example
+     * Server.on(Server.eventTypes.PLAYER_JOIN, (event) => {
+     *   console.log(`${event.player.name} joined`);
+     * });
+     */
+    function on(event: ServerEventType, handler: ServerEventHandler): void;
+
+    /**
+     * Register one-time event handler
+     * @param event - Event name (use Server.eventTypes for constants)
+     * @param handler - Event handler
+     * @example
+     * Server.once(Server.eventTypes.PLAYER_LEAVE, (event) => {
+     *   console.log(`${event.player.name} left (handled once)`);
+     * });
+     */
+    function once(event: ServerEventType, handler: ServerEventHandler): void;
+
+    /**
+     * Remove event handler
+     * @param event - Event name
+     * @param handler - Event handler
+     */
+    function off(event: ServerEventType, handler: ServerEventHandler): void;
+
+    /**
+     * Broadcast message to all players
+     * @param message - Message text
+     */
+    function broadcast(message: string): void;
+
+    /**
+     * Run server command
+     * @param command - Command to execute
+     */
+    function runCommand(command: string): void;
+}
+
+export default Server;

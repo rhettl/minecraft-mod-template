@@ -9,12 +9,14 @@ console.log("=".repeat(50));
 // Test 1: Import built-in APIs (no .js = built-in)
 console.log("\n[Test 1] Importing built-in APIs...");
 import World from 'World';
-import Structure from 'Structure';
+import StructureNbt from 'StructureNbt';
+import LargeStructureNbt from 'LargeStructureNbt';
 import Store from 'Store';
 import NBT from 'NBT';
 
 console.log("  World:", World.toString());
-console.log("  Structure:", Structure.toString());
+console.log("  StructureNbt:", StructureNbt.toString());
+console.log("  LargeStructureNbt:", LargeStructureNbt.toString());
 console.log("  Store:", Store.toString());
 console.log("  NBT:", NBT.toString());
 console.log("  ✓ Built-in imports successful");
