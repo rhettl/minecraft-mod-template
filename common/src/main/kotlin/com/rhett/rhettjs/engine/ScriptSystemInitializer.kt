@@ -81,7 +81,8 @@ object ScriptSystemInitializer {
         com.rhett.rhettjs.world.WorldManager.setServer(server)
         com.rhett.rhettjs.structure.StructureNbtManager.setServer(server)
         com.rhett.rhettjs.structure.LargeStructureNbtManager.setServer(server)
-        ConfigManager.debug("ServerEventManager, WorldManager, StructureNbtManager, and LargeStructureNbtManager initialized with server reference")
+        com.rhett.rhettjs.structure.WorldgenStructureManager.setServer(server)
+        ConfigManager.debug("ServerEventManager, WorldManager, StructureNbtManager, LargeStructureNbtManager, and WorldgenStructureManager initialized with server reference")
 
         // Initialize Structure API (needs server directory)
         initializeStructureAPI(serverDirectory)

@@ -5,7 +5,6 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.rhett.rhettjs.engine.GraalEngine
 import net.minecraft.commands.CommandBuildContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.core.HolderLookup
 import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.proxy.ProxyObject
 import org.junit.jupiter.api.AfterEach
@@ -13,10 +12,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.mockito.Mockito
-import kotlin.test.assertEquals
-import kotlin.test.assertFails
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.assertThrows
 
 /**
  * Tests for optional argument support in the Commands API.
@@ -40,10 +39,8 @@ class OptionalArgumentsTest {
         registry = CustomCommandRegistry()
         dispatcher = CommandDispatcher()
 
-        // Mock CommandBuildContext
+        // Mock CommandBuildContext - simple mock without stubbing (tests don't need actual lookups)
         buildContext = Mockito.mock(CommandBuildContext::class.java)
-        val holderLookup = Mockito.mock(HolderLookup.Provider::class.java)
-        Mockito.`when`(buildContext.lookupOrThrow(Mockito.any())).thenReturn(holderLookup)
 
         // Create a real GraalVM context for testing
         graalContext = Context.newBuilder("js")
@@ -94,12 +91,12 @@ class OptionalArgumentsTest {
         assertNotNull(testNode, "Command 'test' should be registered")
 
         // Verify required argument node exists
-        val requiredNode = testNode.children.find { it.name == "required" }
+        val requiredNode = testNode!!.children.find { it.name == "required" }
         assertNotNull(requiredNode, "Required argument 'required' should exist")
 
         // Verify required node has an execution point (because next arg is optional)
         // This is the first execution point: /test <required>
-        assertTrue(requiredNode.command != null, "Required argument node should have execution point")
+        assertTrue(requiredNode!!.command != null, "Required argument node should have execution point")
 
         // Verify optional argument node exists under required
         val optionalNode = requiredNode.children.find { it.name == "optional" }
@@ -107,7 +104,7 @@ class OptionalArgumentsTest {
 
         // Verify optional node has execution point
         // This is the second execution point: /test <required> [optional]
-        assertTrue(optionalNode.command != null, "Optional argument node should have execution point")
+        assertTrue(optionalNode!!.command != null, "Optional argument node should have execution point")
     }
 
     @Test
@@ -160,19 +157,19 @@ class OptionalArgumentsTest {
         assertNotNull(saveNode, "Subcommand 'save' should exist")
 
         // Verify argument chain
-        val nameNode = saveNode.children.find { it.name == "name" }
+        val nameNode = saveNode!!.children.find { it.name == "name" }
         assertNotNull(nameNode, "Argument 'name' should exist")
 
         // Name node should have execution (first optional starts after it)
-        assertTrue(nameNode.command != null, "Name node should have execution point")
+        assertTrue(nameNode!!.command != null, "Name node should have execution point")
 
         val sizeNode = nameNode.children.find { it.name == "size" }
         assertNotNull(sizeNode, "Argument 'size' should exist")
-        assertTrue(sizeNode.command != null, "Size node should have execution point")
+        assertTrue(sizeNode!!.command != null, "Size node should have execution point")
 
         val authorNode = sizeNode.children.find { it.name == "author" }
         assertNotNull(authorNode, "Argument 'author' should exist")
-        assertTrue(authorNode.command != null, "Author node should have execution point")
+        assertTrue(authorNode!!.command != null, "Author node should have execution point")
     }
 
     @Test
@@ -205,7 +202,7 @@ class OptionalArgumentsTest {
         registry.storeCommand("test", commandData)
 
         // This should throw an error during validation
-        assertFails {
+        assertThrows<Exception> {
             registry.registerAll()
         }
     }
@@ -244,13 +241,13 @@ class OptionalArgumentsTest {
         val testNode = dispatcher.root.getChild("test")
         assertNotNull(testNode)
 
-        val requiredNode = testNode.children.find { it.name == "required" }
+        val requiredNode = testNode!!.children.find { it.name == "required" }
         assertNotNull(requiredNode)
-        assertTrue(requiredNode.command != null, "Should have execution point even with null default")
+        assertTrue(requiredNode!!.command != null, "Should have execution point even with null default")
 
         val optionalNode = requiredNode.children.find { it.name == "optional" }
         assertNotNull(optionalNode)
-        assertTrue(optionalNode.command != null)
+        assertTrue(optionalNode!!.command != null)
     }
 
     @Test
@@ -288,14 +285,14 @@ class OptionalArgumentsTest {
         assertNotNull(testNode)
 
         // First optional should be a direct child and have execution
-        val opt1Node = testNode.children.find { it.name == "opt1" }
+        val opt1Node = testNode!!.children.find { it.name == "opt1" }
         assertNotNull(opt1Node, "First optional argument should exist")
-        assertTrue(opt1Node.command != null, "First optional should have execution point")
+        assertTrue(opt1Node!!.command != null, "First optional should have execution point")
 
         // Second optional should chain from first
         val opt2Node = opt1Node.children.find { it.name == "opt2" }
         assertNotNull(opt2Node, "Second optional argument should exist")
-        assertTrue(opt2Node.command != null, "Second optional should have execution point")
+        assertTrue(opt2Node!!.command != null, "Second optional should have execution point")
     }
 
     @Test
@@ -332,14 +329,14 @@ class OptionalArgumentsTest {
         val testNode = dispatcher.root.getChild("test")
         assertNotNull(testNode)
 
-        val arg1Node = testNode.children.find { it.name == "arg1" }
+        val arg1Node = testNode!!.children.find { it.name == "arg1" }
         assertNotNull(arg1Node)
 
         // With no optional args, only the last node has execution
-        assertTrue(arg1Node.command == null, "First required arg should NOT have execution (no optionals)")
+        assertTrue(arg1Node!!.command == null, "First required arg should NOT have execution (no optionals)")
 
         val arg2Node = arg1Node.children.find { it.name == "arg2" }
         assertNotNull(arg2Node)
-        assertTrue(arg2Node.command != null, "Last argument should have execution point")
+        assertTrue(arg2Node!!.command != null, "Last argument should have execution point")
     }
 }

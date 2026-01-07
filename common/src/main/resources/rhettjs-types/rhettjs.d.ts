@@ -14,6 +14,7 @@ export { default as Commands } from './commands';
 export { default as Server } from './server';
 export { default as World } from './world';
 export { StructureNbt, LargeStructureNbt } from './structure';
+export { WorldgenStructure } from './worldgen-structure';
 export { default as Script } from './script';
 
 // Re-export common types
@@ -27,6 +28,7 @@ export * from './types';
  * Standard console logging
  */
 declare global {
+    // @ts-ignore
     namespace console {
         function log(...messages: any[]): void;
         function info(...messages: any[]): void;
@@ -57,7 +59,15 @@ import './runtime'; // Load global Runtime declaration
 // ============================================================================
 
 declare module 'rhettjs' {
-    export * from './rhettjs';
+    export { default as Store } from './store';
+    export { default as NBT } from './nbt';
+    export { default as Commands } from './commands';
+    export { default as Server } from './server';
+    export { default as World } from './world';
+    export { StructureNbt, LargeStructureNbt } from './structure';
+    export { WorldgenStructure } from './worldgen-structure';
+    export { default as Script } from './script';
+    export * from './types';
 }
 
 // Legacy module support for Runtime (even though it's global)
@@ -92,6 +102,10 @@ declare module 'rhettjs/structure' {
 
 declare module 'rhettjs/script' {
     export { default } from './script';
+}
+
+declare module 'rhettjs/worldgen-structure' {
+    export { WorldgenStructure } from './worldgen-structure';
 }
 
 // Legacy bare module support (for backward compatibility)
@@ -130,4 +144,8 @@ declare module 'LargeStructureNbt' {
 
 declare module 'Script' {
     export { default } from './script';
+}
+
+declare module 'WorldgenStructure' {
+    export { WorldgenStructure } from './worldgen-structure';
 }

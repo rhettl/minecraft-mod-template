@@ -18,18 +18,26 @@ import org.graalvm.polyglot.proxy.ProxyObject
  *
  * Caller object structure:
  * ```javascript
+ * // Player caller (isPlayer: true)
  * {
- *   name: string,              // Player name or "Server"
- *   isPlayer: boolean,
- *
- *   // If isPlayer is true, includes all Player properties
+ *   name: string,              // Player name
+ *   isPlayer: true,
+ *   position: {
+ *     x: number,
+ *     y: number,
+ *     z: number,
+ *     dimension: string        // Access via caller.position.dimension
+ *   },
  *   ...PlayerAdapter properties,
+ *   sendMessage(msg: string): void
+ * }
  *
- *   // Methods
- *   sendMessage(msg: string): void,
- *
- *   // Escape hatch
- *   source: CommandSourceStack
+ * // Server caller (isPlayer: false)
+ * {
+ *   name: "Server",
+ *   isPlayer: false,
+ *   dimension: string,         // Access via caller.dimension
+ *   sendMessage(msg: string): void
  * }
  * ```
  */
@@ -57,9 +65,17 @@ object CallerAdapter {
      * Create a server caller object (non-player).
      */
     private fun createServerCaller(source: CommandSourceStack, context: Context): ProxyObject {
+        // Get the dimension the command was executed in
+        val dimension = try {
+            source.level.dimension().location().toString()
+        } catch (e: Exception) {
+            "minecraft:overworld" // Fallback to overworld if level not available
+        }
+
         return ProxyObject.fromMap(mapOf(
             "name" to "Server",
             "isPlayer" to false,
+            "dimension" to dimension,
 
             // Send message method
             "sendMessage" to ProxyExecutable { args ->

@@ -3,7 +3,7 @@
   "package": "com.rhett.rhettjs.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "PackRepositoryMixin"
+    "ChunkGeneratorMixin"
   ],
   "injectors": {
     "defaultRequire": 1

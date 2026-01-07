@@ -49,6 +49,7 @@ class APITypeValidationTest {
         // Map API name to its file
         val fileName = when (apiName) {
             "StructureNbt", "LargeStructureNbt" -> "structure.d.ts"
+            "WorldgenStructure" -> "worldgen-structure.d.ts"
             "World" -> "world.d.ts"
             "Commands" -> "commands.d.ts"
             "Server" -> "server.d.ts"
@@ -64,8 +65,8 @@ class APITypeValidationTest {
             ?.readText()
             ?: throw IllegalStateException("Type definitions not found at /rhettjs-types/$fileName")
 
-        // Extract the API block: "declare namespace ApiName { ... }"
-        val namespacePattern = """declare\s+namespace\s+$apiName\s*\{""".toRegex()
+        // Extract the API block: "declare namespace ApiName { ... }" or "namespace ApiName { ... }" (inside declare global)
+        val namespacePattern = """(?:declare\s+)?namespace\s+$apiName\s*\{""".toRegex()
         val match = namespacePattern.find(dtsContent)
             ?: throw IllegalStateException("Namespace '$apiName' not found in type definitions")
 
@@ -122,7 +123,7 @@ class APITypeValidationTest {
         val builtinName = when (apiName) {
             "Runtime" -> "Runtime"
             "Console" -> "console"  // Special case: lowercase
-            "StructureNbt", "LargeStructureNbt", "World", "Commands", "Server", "Store", "NBT", "Script" -> "__builtin_$apiName"
+            "StructureNbt", "LargeStructureNbt", "WorldgenStructure", "World", "Commands", "Server", "Store", "NBT", "Script" -> "__builtin_$apiName"
             else -> throw IllegalArgumentException("Unknown API: $apiName")
         }
 
@@ -138,7 +139,7 @@ class APITypeValidationTest {
         val knownProperties = setOf(
             "env",          // Runtime.env
             "dimensions",   // World.dimensions
-            "tps", "players", "maxPlayers", "motd",  // Server properties
+            "tps", "players", "maxPlayers", "motd", "eventTypes",  // Server properties
             "raw"           // Script.argv.raw
         )
 
@@ -333,6 +334,28 @@ class APITypeValidationTest {
     }
 
     @Test
+    fun `WorldgenStructure API matches type definitions`() {
+        val expected = parseTypeDefinitions("WorldgenStructure")
+        val actual = getRuntimeMethods("WorldgenStructure")
+
+        assertEquals(
+            expected,
+            actual,
+            """
+            WorldgenStructure API methods don't match worldgen-structure.d.ts!
+
+            Expected (from .d.ts): $expected
+            Actual (from runtime): $actual
+
+            Missing from runtime: ${expected - actual.toSet()}
+            Missing from .d.ts: ${actual - expected.toSet()}
+
+            Action: Update common/src/main/resources/rhettjs-types/worldgen-structure.d.ts
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun `type definitions files exist and are readable`() {
         // Check barrel file
         val barrelContent = javaClass.getResourceAsStream("/rhettjs-types/rhettjs.d.ts")
@@ -342,7 +365,7 @@ class APITypeValidationTest {
 
         // Check individual API files
         val apiFiles = listOf("world.d.ts", "commands.d.ts", "server.d.ts", "structure.d.ts",
-                              "store.d.ts", "nbt.d.ts", "runtime.d.ts", "script.d.ts", "types.d.ts")
+                              "worldgen-structure.d.ts", "store.d.ts", "nbt.d.ts", "runtime.d.ts", "script.d.ts", "types.d.ts")
 
         for (file in apiFiles) {
             val content = javaClass.getResourceAsStream("/rhettjs-types/$file")

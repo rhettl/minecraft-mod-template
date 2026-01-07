@@ -93,6 +93,7 @@ object GraalEngine {
         com.rhett.rhettjs.world.WorldManager.reset()
         com.rhett.rhettjs.structure.StructureNbtManager.reset()
         com.rhett.rhettjs.structure.LargeStructureNbtManager.reset()
+        com.rhett.rhettjs.structure.WorldgenStructureManager.reset()
 
         ConfigManager.debug("GraalVM engine reset (context closed, will be recreated)")
     }
@@ -199,6 +200,7 @@ object GraalEngine {
                 com.rhett.rhettjs.world.WorldManager.setContext(newCtx)
                 com.rhett.rhettjs.structure.StructureNbtManager.setContext(newCtx)
                 com.rhett.rhettjs.structure.LargeStructureNbtManager.setContext(newCtx)
+                com.rhett.rhettjs.structure.WorldgenStructureManager.setContext(newCtx)
                 ConfigManager.debug("Created shared GraalVM context with pre-compiled helpers and built-in APIs")
             }
         }
@@ -1184,6 +1186,105 @@ object GraalEngine {
     }
 
     /**
+     * Create WorldgenStructure API proxy for JavaScript.
+     * Handles Minecraft's worldgen structures (villages, temples, bastions, etc.).
+     * All methods return Promises.
+     * Delegates to WorldgenStructureManager for actual implementation.
+     */
+    private fun createWorldgenStructureAPIProxy(): ProxyObject {
+        val context = getOrCreateContext()
+
+        return ProxyObject.fromMap(mapOf(
+            "list" to ProxyExecutable { args ->
+                val namespace = if (args.isNotEmpty() && !args[0].isNull) args[0].asString() else null
+                convertFutureToPromise<List<String>>(context, com.rhett.rhettjs.structure.WorldgenStructureManager.list(namespace))
+            },
+            "exists" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "exists() requires a structure name")
+                }
+                val name = args[0].asString()
+                convertFutureToPromise<Boolean>(context, com.rhett.rhettjs.structure.WorldgenStructureManager.exists(name))
+            },
+            "info" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "info() requires a structure name")
+                }
+                val name = args[0].asString()
+                convertFutureToPromise<Map<String, Any?>>(context, com.rhett.rhettjs.structure.WorldgenStructureManager.info(name))
+            },
+            "place" to ProxyExecutable { args ->
+                if (args.size < 2) {
+                    return@ProxyExecutable createRejectedPromise(context, "place() requires a structure name and options object")
+                }
+                val name = args[0].asString()
+                val options = args[1]
+
+                // Extract options
+                val x = if (options.hasMember("x")) options.getMember("x").asInt() else 0
+                val z = if (options.hasMember("z")) options.getMember("z").asInt() else 0
+                val dimension = if (options.hasMember("dimension") && !options.getMember("dimension").isNull) {
+                    options.getMember("dimension").asString()
+                } else null
+                val seed = if (options.hasMember("seed") && !options.getMember("seed").isNull) {
+                    options.getMember("seed").asLong()
+                } else null
+                val surface = if (options.hasMember("surface") && !options.getMember("surface").isNull) {
+                    options.getMember("surface").asString()
+                } else null
+                val rotation = if (options.hasMember("rotation") && !options.getMember("rotation").isNull) {
+                    options.getMember("rotation").asString()
+                } else null
+
+                convertFutureToPromise<Map<String, Any?>>(
+                    context,
+                    com.rhett.rhettjs.structure.WorldgenStructureManager.place(name, x, z, dimension, seed, surface, rotation)
+                )
+            },
+            "placeJigsaw" to ProxyExecutable { args ->
+                if (args.isEmpty()) {
+                    return@ProxyExecutable createRejectedPromise(context, "placeJigsaw() requires an options object")
+                }
+                val options = args[0]
+
+                // Extract required options
+                if (!options.hasMember("pool")) {
+                    return@ProxyExecutable createRejectedPromise(context, "placeJigsaw() requires 'pool' option")
+                }
+                if (!options.hasMember("target")) {
+                    return@ProxyExecutable createRejectedPromise(context, "placeJigsaw() requires 'target' option")
+                }
+                if (!options.hasMember("maxDepth")) {
+                    return@ProxyExecutable createRejectedPromise(context, "placeJigsaw() requires 'maxDepth' option")
+                }
+                if (!options.hasMember("x") || !options.hasMember("z")) {
+                    return@ProxyExecutable createRejectedPromise(context, "placeJigsaw() requires 'x' and 'z' options")
+                }
+
+                val pool = options.getMember("pool").asString()
+                val target = options.getMember("target").asString()
+                val maxDepth = options.getMember("maxDepth").asInt()
+                val x = options.getMember("x").asInt()
+                val z = options.getMember("z").asInt()
+                val dimension = if (options.hasMember("dimension") && !options.getMember("dimension").isNull) {
+                    options.getMember("dimension").asString()
+                } else null
+                val seed = if (options.hasMember("seed") && !options.getMember("seed").isNull) {
+                    options.getMember("seed").asLong()
+                } else null
+                val surface = if (options.hasMember("surface") && !options.getMember("surface").isNull) {
+                    options.getMember("surface").asString()
+                } else null
+
+                convertFutureToPromise<Map<String, Any?>>(
+                    context,
+                    com.rhett.rhettjs.structure.WorldgenStructureManager.placeJigsaw(pool, target, maxDepth, x, z, dimension, seed, surface)
+                )
+            }
+        ))
+    }
+
+    /**
      * Create World API proxy for JavaScript.
      * All methods return Promises except for the dimensions property.
      * Delegates to WorldManager for actual implementation.
@@ -1753,6 +1854,7 @@ object GraalEngine {
         val worldAPI = createWorldAPIProxy()
         val structureNbtAPI = createStructureNbtAPIProxy()
         val largeStructureNbtAPI = createLargeStructureNbtAPIProxy()
+        val worldgenStructureAPI = createWorldgenStructureAPIProxy()
         val nbtAPI = createNBTAPIProxy()
         val storeAPI = createStoreAPIProxy()
         val serverAPI = createServerAPIProxy()
@@ -1762,6 +1864,7 @@ object GraalEngine {
         bindings.putMember("__builtin_World", worldAPI)
         bindings.putMember("__builtin_StructureNbt", structureNbtAPI)
         bindings.putMember("__builtin_LargeStructureNbt", largeStructureNbtAPI)
+        bindings.putMember("__builtin_WorldgenStructure", worldgenStructureAPI)
         bindings.putMember("__builtin_Store", storeAPI)
         bindings.putMember("__builtin_NBT", nbtAPI)
         bindings.putMember("__builtin_Server", serverAPI)
